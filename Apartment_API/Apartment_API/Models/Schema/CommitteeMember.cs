@@ -23,6 +23,10 @@ public sealed class CommitteeMember
     public DateTime? EffectiveToDate { get; set; }
 
     public int StatusId { get; set; }
+
+    [MaxLength(300)]
+    public string? EndRemarks { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public int CreatedBy { get; set; }
     public DateTime? UpdatedAt { get; set; }

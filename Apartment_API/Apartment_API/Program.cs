@@ -5,6 +5,7 @@ using Apartment_API.Configuration;
 using Apartment_API.Data;
 using Apartment_API.Helpers;
 using Apartment_API.Services.Implementation;
+using Apartment_API.Services.Implementation.Committee;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +83,9 @@ builder.Services.AddScoped<ICoOwnerResidentService, CoOwnerResidentService>();
 builder.Services.AddScoped<ITenantResidentService, TenantResidentService>();
 builder.Services.AddScoped<IFamilyMemberResidentService, FamilyMemberResidentService>();
 builder.Services.AddScoped<IOwnershipTransferResidentService, OwnershipTransferResidentService>();
+builder.Services.AddScoped<CommitteeDataHelper>();
+builder.Services.AddScoped<ICommitteeTenureService, CommitteeTenureService>();
+builder.Services.AddScoped<ICommitteeMemberService, CommitteeMemberService>();
 builder.Services
     .AddApiVersioning(options =>
     {

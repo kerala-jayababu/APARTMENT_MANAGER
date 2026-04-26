@@ -37,6 +37,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<Apartment> Apartments => Set<Apartment>();
     public DbSet<ApartmentUser> ApartmentUsers => Set<ApartmentUser>();
+    public DbSet<CommitteeTenure> CommitteeTenures => Set<CommitteeTenure>();
+    public DbSet<CommitteeMember> CommitteeMembers => Set<CommitteeMember>();
+    public DbSet<CommitteeTenureExtensionLog> CommitteeTenureExtensionLogs => Set<CommitteeTenureExtensionLog>();
 
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<Unit> Units => Set<Unit>();
