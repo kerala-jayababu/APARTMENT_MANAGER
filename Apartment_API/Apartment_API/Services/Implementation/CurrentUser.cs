@@ -21,4 +21,14 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
     public string? PhoneNumber => Principal?.FindFirstValue(ClaimTypesExtra.Phone);
 
     public bool IsSuperAdmin => Principal?.IsInRole("SuperAdmin") == true;
+
+    public string? TokenPurpose => Principal?.FindFirstValue(ClaimTypesExtra.TokenPurpose);
+
+    public int? IdApartment =>
+        int.TryParse(Principal?.FindFirstValue(ClaimTypesExtra.ApartmentId), out var aid) ? aid : null;
+
+    public string? ApartmentName => Principal?.FindFirstValue(ClaimTypesExtra.ApartmentName);
+
+    public int? ApartmentUserRoleId =>
+        int.TryParse(Principal?.FindFirstValue(ClaimTypesExtra.ApartmentUserRoleId), out var r) ? r : null;
 }

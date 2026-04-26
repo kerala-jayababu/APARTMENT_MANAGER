@@ -31,7 +31,7 @@ public sealed class ConfigureSwaggerOptions(IApiVersionDescriptionProvider provi
             Type = SecuritySchemeType.Http,
             Scheme = "bearer",
             BearerFormat = "JWT",
-            Description = "Paste JWT from login, format: Bearer {token}"
+            Description = "1) After login/OTP, use ApartmentSelectionToken for GET /Auth/users/{userId}/apartments and POST /Auth/tenant-access-token. 2) Use AccessToken from tenant-access-token as Bearer for all other APIs."
         });
         options.AddSecurityRequirement(new OpenApiSecurityRequirement
         {

@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -14,10 +15,11 @@ public sealed class AuthController(
     IUserService userService,
     IJwtTokenService jwtTokenService,
     IOtpAuthService otpAuthService,
+    IApartmentAuthService apartmentAuthService,
     ICurrentUser currentUser,
     ILogger<AuthController> logger) : ControllerBase
 {
-    /// <summary>Who am I, based on the Bearer token. Requires Authorization header.</summary>
+    /// <summary>Who am I, based on the Bearer token (selection or access JWT).</summary>
     [HttpGet("me")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponseDto<CurrentUserInfoDto>), StatusCodes.Status200OK)]
@@ -102,18 +104,19 @@ public sealed class AuthController(
         }
     }
 
+    /// <summary>Validates credentials only. Returns a short-lived <see cref="LoginAuthenticationResultDto.ApartmentSelectionToken" /> (not the API access JWT). Use tenant-access-token next.</summary>
     [HttpPost("login")]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<ApiResponseDto<LoginWithTokenResponseDto>>> Login(
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<LoginAuthenticationResultDto>>> Login(
         [FromBody] LoginRequestDto request,
         CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponseDto<LoginWithTokenResponseDto>
+            return BadRequest(new ApiResponseDto<LoginAuthenticationResultDto>
             {
                 Success = false,
                 Message = "Validation failed.",
@@ -126,7 +129,7 @@ public sealed class AuthController(
             var (user, err) = await userService.LoginAsync(request, cancellationToken);
             if (err == "INVALID_CREDENTIALS")
             {
-                return Unauthorized(new ApiResponseDto<LoginWithTokenResponseDto>
+                return Unauthorized(new ApiResponseDto<LoginAuthenticationResultDto>
                 {
                     Success = false,
                     Message = "Invalid email or password.",
@@ -134,17 +137,16 @@ public sealed class AuthController(
                 });
             }
 
-            var (accessToken, expiresAt) = jwtTokenService.CreateToken(user);
-            return Ok(new ApiResponseDto<LoginWithTokenResponseDto>
+            var (selectionToken, expires) = jwtTokenService.CreateApartmentSelectionToken(user);
+            return Ok(new ApiResponseDto<LoginAuthenticationResultDto>
             {
                 Success = true,
-                Message = "Login successful.",
-                Data = new LoginWithTokenResponseDto
+                Message = "Authenticated. Use ApartmentSelectionToken to list apartments, then tenant-access-token.",
+                Data = new LoginAuthenticationResultDto
                 {
-                    AccessToken = accessToken,
-                    TokenType = "Bearer",
-                    ExpiresAtUtc = expiresAt,
-                    User = user
+                    IdUser = user.IdUser,
+                    ApartmentSelectionToken = selectionToken,
+                    ApartmentSelectionExpiresAtUtc = expires
                 }
             });
         }
@@ -152,7 +154,7 @@ public sealed class AuthController(
         {
             logger.LogError(ex, "Error during login.");
             return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<LoginWithTokenResponseDto>
+                new ApiResponseDto<LoginAuthenticationResultDto>
                 {
                     Success = false,
                     Message = "An unexpected error occurred.",
@@ -161,7 +163,6 @@ public sealed class AuthController(
         }
     }
 
-    /// <summary>Send a one-time code to the user's email (stores LoginOTP, OTPCreatedDate, OTPExpiryDate in Users).</summary>
     [HttpPost("login-otp/request")]
     [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status400BadRequest)]
@@ -203,19 +204,19 @@ public sealed class AuthController(
         }
     }
 
-    /// <summary>Verify the emailed OTP and return the same token payload as password login.</summary>
+    /// <summary>Verifies OTP only. Returns the same shape as password login (selection token, not API access JWT).</summary>
     [HttpPost("login-otp/verify")]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponseDto<LoginWithTokenResponseDto>), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<ApiResponseDto<LoginWithTokenResponseDto>>> VerifyLoginOtp(
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<LoginAuthenticationResultDto>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<LoginAuthenticationResultDto>>> VerifyLoginOtp(
         [FromBody] VerifyOtpDto request,
         CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponseDto<LoginWithTokenResponseDto>
+            return BadRequest(new ApiResponseDto<LoginAuthenticationResultDto>
             {
                 Success = false,
                 Message = "Validation failed.",
@@ -228,7 +229,7 @@ public sealed class AuthController(
             var (user, err) = await otpAuthService.VerifyLoginOtpAsync(request.Email, request.Otp, cancellationToken);
             if (err is "EXPIRED_OR_INVALID_OTP" or "INVALID_OTP")
             {
-                return Unauthorized(new ApiResponseDto<LoginWithTokenResponseDto>
+                return Unauthorized(new ApiResponseDto<LoginAuthenticationResultDto>
                 {
                     Success = false,
                     Message = err == "EXPIRED_OR_INVALID_OTP"
@@ -238,17 +239,16 @@ public sealed class AuthController(
                 });
             }
 
-            var (accessToken, expiresAt) = jwtTokenService.CreateToken(user!);
-            return Ok(new ApiResponseDto<LoginWithTokenResponseDto>
+            var (selectionToken, expires) = jwtTokenService.CreateApartmentSelectionToken(user!);
+            return Ok(new ApiResponseDto<LoginAuthenticationResultDto>
             {
                 Success = true,
-                Message = "Login successful.",
-                Data = new LoginWithTokenResponseDto
+                Message = "OTP verified. Use ApartmentSelectionToken for apartment list and tenant-access-token.",
+                Data = new LoginAuthenticationResultDto
                 {
-                    AccessToken = accessToken,
-                    TokenType = "Bearer",
-                    ExpiresAtUtc = expiresAt,
-                    User = user!
+                    IdUser = user!.IdUser,
+                    ApartmentSelectionToken = selectionToken,
+                    ApartmentSelectionExpiresAtUtc = expires
                 }
             });
         }
@@ -256,7 +256,136 @@ public sealed class AuthController(
         {
             logger.LogError(ex, "Error during OTP verification.");
             return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<LoginWithTokenResponseDto>
+                new ApiResponseDto<LoginAuthenticationResultDto>
+                {
+                    Success = false,
+                    Message = "An unexpected error occurred.",
+                    Errors = ["INTERNAL_SERVER_ERROR"]
+                });
+        }
+    }
+
+    /// <summary>
+    /// Lists apartments the user may access. Requires the short-lived selection JWT. <paramref name="userId" /> must match the token subject.
+    /// </summary>
+    [HttpGet("users/{userId:int}/apartments")]
+    [Authorize(Policy = AuthorizationPolicies.ApartmentSelect)]
+    [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<AvailableApartmentItemDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponseDto<IReadOnlyList<AvailableApartmentItemDto>>>> GetUserApartments(
+        [FromRoute] int userId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.IdUser != userId)
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var data = await apartmentAuthService.GetApartmentsForUserAsync(userId, cancellationToken);
+            return Ok(new ApiResponseDto<IReadOnlyList<AvailableApartmentItemDto>>
+            {
+                Success = true,
+                Message = "Apartments loaded.",
+                Data = data
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "GetUserApartments");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ApiResponseDto<IReadOnlyList<AvailableApartmentItemDto>>
+                {
+                    Success = false,
+                    Message = "An unexpected error occurred.",
+                    Errors = ["INTERNAL_SERVER_ERROR"]
+                });
+        }
+    }
+
+    /// <summary>
+    /// Issues the API access JWT for a specific apartment. Requires selection JWT. Fails if the user has no apartment membership or is not mapped to the requested apartment.
+    /// </summary>
+    [HttpPost("tenant-access-token")]
+    [Authorize(Policy = AuthorizationPolicies.ApartmentSelect)]
+    [ProducesResponseType(typeof(ApiResponseDto<TenantTokenResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<TenantTokenResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<TenantTokenResponseDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<TenantTokenResponseDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<TenantTokenResponseDto>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponseDto<TenantTokenResponseDto>>> CreateTenantAccessToken(
+        [FromBody] TenantTokenRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new ApiResponseDto<TenantTokenResponseDto>
+            {
+                Success = false,
+                Message = "Validation failed.",
+                Errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList()
+            });
+        }
+
+        if (currentUser.IdUser is not { } uid)
+        {
+            return Unauthorized(new ApiResponseDto<TenantTokenResponseDto>
+            {
+                Success = false,
+                Message = "Not authenticated."
+            });
+        }
+
+        try
+        {
+            var (data, err) = await apartmentAuthService.CreateTenantAccessTokenAsync(uid, request.ApartmentId, cancellationToken);
+            if (err == "USER_INACTIVE_OR_MISSING")
+            {
+                return Unauthorized(new ApiResponseDto<TenantTokenResponseDto>
+                {
+                    Success = false,
+                    Message = "User is inactive or missing.",
+                    Errors = [err]
+                });
+            }
+
+            if (err == "NO_APARTMENT_MEMBERSHIP")
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new ApiResponseDto<TenantTokenResponseDto>
+                    {
+                        Success = false,
+                        Message = "You are not assigned to any apartment. Cannot issue an access token.",
+                        Errors = [err]
+                    });
+            }
+
+            if (err is "NOT_MAPPED_TO_APARTMENT" or "APARTMENT_INACTIVE_OR_MISSING" or "INVALID_APARTMENT_ID")
+            {
+                return NotFound(new ApiResponseDto<TenantTokenResponseDto>
+                {
+                    Success = false,
+                    Message = err == "NOT_MAPPED_TO_APARTMENT"
+                        ? "You are not mapped to this apartment."
+                        : "Apartment not found or inactive.",
+                    Errors = [err!]
+                });
+            }
+
+            return Ok(new ApiResponseDto<TenantTokenResponseDto>
+            {
+                Success = true,
+                Message = "Access token issued. Use it as Bearer for API calls.",
+                Data = data!
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "CreateTenantAccessToken");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ApiResponseDto<TenantTokenResponseDto>
                 {
                     Success = false,
                     Message = "An unexpected error occurred.",

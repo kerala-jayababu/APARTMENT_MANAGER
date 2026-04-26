@@ -3,6 +3,7 @@ using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using Apartment_API.Configuration;
 using Apartment_API.Data;
+using Apartment_API.Helpers;
 using Apartment_API.Services.Implementation;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -50,12 +51,29 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true
     };
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(o =>
+{
+    o.AddPolicy(AuthorizationPolicies.ApartmentSelect, p =>
+        p.RequireClaim(ClaimTypesExtra.TokenPurpose, TokenPurposeValues.ApartmentSelect));
+    o.AddPolicy(AuthorizationPolicies.ApiAccess, p =>
+        p.RequireAssertion(ctx =>
+        {
+            if (ctx.User.IsInRole("SuperAdmin"))
+                return true;
+            return ctx.User.HasClaim(c =>
+                c.Type == ClaimTypesExtra.ApartmentId && int.TryParse(c.Value, out _));
+        }));
+});
 builder.Services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IApartmentAuthService, ApartmentAuthService>();
 builder.Services.AddScoped<IApartmentService, ApartmentService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IGlobalMasterDataService, GlobalMasterDataService>();
+builder.Services.AddScoped<IBankAccountService, BankAccountService>();
+builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
+builder.Services.AddScoped<IIncomeHeadService, IncomeHeadService>();
+builder.Services.AddScoped<IVendorService, VendorService>();
 builder.Services
     .AddApiVersioning(options =>
     {

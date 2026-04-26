@@ -12,4 +12,11 @@ public interface ICurrentUser
     string? FullName { get; }
     string? PhoneNumber { get; }
     bool IsSuperAdmin { get; }
+
+    /// <summary>See <c>TokenPurposeValues</c> in ClaimTypes; null if not on token.</summary>
+    string? TokenPurpose { get; }
+
+    int? IdApartment { get; }
+    string? ApartmentName { get; }
+    int? ApartmentUserRoleId { get; }
 }

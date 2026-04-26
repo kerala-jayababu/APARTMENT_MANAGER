@@ -29,4 +29,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UnitType> UnitTypes => Set<UnitType>();
     public DbSet<UtilityType> UtilityTypes => Set<UtilityType>();
     public DbSet<VendorType> VendorTypes => Set<VendorType>();
+
+    public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<ExpenseHead> ExpenseHeads => Set<ExpenseHead>();
+    public DbSet<IncomeHead> IncomeHeads => Set<IncomeHead>();
+    public DbSet<Vendor> Vendors => Set<Vendor>();
+
+    public DbSet<Apartment> Apartments => Set<Apartment>();
+    public DbSet<ApartmentUser> ApartmentUsers => Set<ApartmentUser>();
 }

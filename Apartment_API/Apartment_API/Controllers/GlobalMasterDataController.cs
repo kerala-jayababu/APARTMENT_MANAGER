@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Apartment_API.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = AuthorizationPolicies.ApiAccess)]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 public sealed class GlobalMasterDataController(

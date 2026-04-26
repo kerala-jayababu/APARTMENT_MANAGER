@@ -1,22 +1,30 @@
-using Apartment_API.Database;
+using Apartment_API.Data;
 using Apartment_API.DTO;
-using Apartment_API.Helpers;
 using Apartment_API.Services.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Apartment_API.Services.Implementation;
 
-public sealed class ApartmentService(ILogger<ApartmentService> logger) : IApartmentService
+public sealed class ApartmentService(AppDbContext db, ILogger<ApartmentService> logger) : IApartmentService
 {
-    public Task<IReadOnlyCollection<ApartmentDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<ApartmentDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        // Exceptions propagate to the controller (no catch here) unless you log and rethrow.
-        logger.LogInformation("Loading apartments from in-memory store.");
+        var list = await db.Apartments.AsNoTracking()
+            .OrderBy(a => a.ApartmentName)
+            .Select(a => new ApartmentDto
+            {
+                IdApartment = a.IdApartment,
+                ApartmentCode = a.ApartmentCode,
+                ApartmentName = a.ApartmentName,
+                AssociationName = a.AssociationName,
+                City = a.City,
+                State = a.State,
+                IsActive = a.IsActive
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        var items = InMemoryApartmentStore.Apartments
-            .Select(a => a.ToDto())
-            .ToArray();
-
-        logger.LogInformation("Loaded {Count} apartment(s).", items.Length);
-        return Task.FromResult<IReadOnlyCollection<ApartmentDto>>(items);
+        logger.LogInformation("Loaded {Count} apartment(s) from database.", list.Count);
+        return list;
     }
 }
