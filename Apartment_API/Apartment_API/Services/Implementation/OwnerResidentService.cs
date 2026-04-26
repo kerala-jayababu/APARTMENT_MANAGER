@@ -1,4 +1,4 @@
-using Apartment_API.Data;
+﻿using Apartment_API.Data;
 using Apartment_API.DTO;
 using Apartment_API.Helpers;
 using Apartment_API.Models;
@@ -108,49 +108,111 @@ public sealed class OwnerResidentService(AppDbContext db, IWebHostEnvironment en
         };
     }
 
+    private const string OwnerRoleCode = "OWNER";
+
+    // ────────────────────────────────────────────────────────────────────
+    //  CREATE
+    // ────────────────────────────────────────────────────────────────────
     public async Task<int> CreateAsync(
-        int apartmentId, int userId, CreateOwnerRequest request, CancellationToken cancellationToken = default)
+        int apartmentId,
+        int userId,
+        CreateOwnerRequest request,
+        CancellationToken cancellationToken = default)
     {
+        // 1. Sanity ──────────────────────────────────────────────────────
         if (request.LinkedUnitIds is null || request.LinkedUnitIds.Count == 0)
             throw new InvalidOperationException("linkedUnitIds is required.");
+
+        // De-duplicate the unit-id list so we never insert two UnitOwner
+        // rows for the same unit.
+        var unitIds = request.LinkedUnitIds.Distinct().ToList();
+
+        var phone = request.PhoneNumber.Trim();
+        var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email!.Trim();
+
+        if (string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Email is required so the owner can log into the mobile app.");
+
         var ownerType = await RequirePersonTypeIdAsync(PersonTypeCodes.Owner, cancellationToken);
-        var dup = await Db.Persons.AnyAsync(
-            p => p.ApartmentId == apartmentId && p.PhoneNumber == request.PhoneNumber.Trim() && p.IsActive,
+        var ownerRoleId = await RequireRoleIdAsync(OwnerRoleCode, cancellationToken);
+
+        // 2. Cross-row validation ────────────────────────────────────────
+        var phoneTaken = await Db.Persons.AnyAsync(
+            p => p.ApartmentId == apartmentId && p.PhoneNumber == phone && p.IsActive,
             cancellationToken);
-        if (dup) throw new InvalidOperationException("Phone number already exists in this apartment.");
-        foreach (var uid in request.LinkedUnitIds)
+        if (phoneTaken)
+            throw new InvalidOperationException("Phone number already exists in this apartment.");
+
+        foreach (var uid in unitIds)
         {
             var hasPrimary = await Db.UnitOwners.AnyAsync(
-                uo => uo.ApartmentId == apartmentId && uo.UnitId == uid && uo.IsPrimaryOwner && uo.IsActive,
+                uo => uo.ApartmentId == apartmentId
+                   && uo.UnitId == uid
+                   && uo.IsPrimaryOwner
+                   && uo.IsActive,
                 cancellationToken);
-            if (hasPrimary) throw new InvalidOperationException($"Unit {uid} already has a primary owner.");
+            if (hasPrimary)
+                throw new InvalidOperationException($"Unit {uid} already has a primary owner.");
         }
+
+        // 3. Persist within a single transaction ─────────────────────────
         await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
+
+        // 3a. Create the User row first — needed for Person.LinkedUserId
+        var user = new User
+        {
+            FullName = request.FullName.Trim(),
+            Email = email,
+            PhoneNumber = phone,
+            PasswordHash = GenerateOtpOnlyPasswordHash(), // forced password reset on first OTP login
+            IsSuperAdmin = false,
+            IsActive = true,
+            CreatedAt = now,
+            CreatedBy = userId
+        };
+        Db.Users.Add(user);
+        await Db.SaveChangesAsync(cancellationToken);
+
+        // 3b. Tenant-scope mapping → ApartmentUsers
+        Db.ApartmentUsers.Add(new ApartmentUser
+        {
+            ApartmentId = apartmentId,
+            UserId = user.IdUser,
+            RoleId = ownerRoleId,
+            IsActive = true,
+            CreatedAt = now,
+            CreatedBy = userId
+        });
+
+        // 3c. Person row (with LinkedUserId)
         var person = new Person
         {
             ApartmentId = apartmentId,
-            PersonNumber = "TEMP",
+            PersonNumber = "TEMP",                  // overwritten after we know IdPerson
             PersonTypeId = ownerType,
             FullName = request.FullName.Trim(),
-            Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email!.Trim(),
-            PhoneNumber = request.PhoneNumber.Trim(),
+            Email = email,
+            PhoneNumber = phone,
             AlternatePhone = request.AlternatePhone,
             IdentityDocTypeId = request.IdentityDocTypeId,
             IdentityDocNumber = request.IdentityDocNumber,
             PermanentAddress = request.PermanentAddress,
             EmergencyContactName = request.EmergencyContactName,
             EmergencyContactPhone = request.EmergencyContactPhone,
+            LinkedUserId = user.IdUser,             // ← NEW: wires the resident profile to the login user
             IsActive = true,
             CreatedAt = now,
             CreatedBy = userId
         };
         Db.Persons.Add(person);
         await Db.SaveChangesAsync(cancellationToken);
+
         person.PersonNumber = $"P-{person.IdPerson:D4}";
-        await Db.SaveChangesAsync(cancellationToken);
+
+        // 3d. UnitOwners — first deduped unit becomes primary
         var isFirst = true;
-        foreach (var uid in request.LinkedUnitIds)
+        foreach (var uid in unitIds)
         {
             Db.UnitOwners.Add(new UnitOwner
             {
@@ -158,79 +220,172 @@ public sealed class OwnerResidentService(AppDbContext db, IWebHostEnvironment en
                 UnitId = uid,
                 PersonId = person.IdPerson,
                 IsPrimaryOwner = isFirst,
-                OwnershipFromDate = request.OwnershipFromDate.Date,
+                OwnershipFromDate = request.OwnershipFromDate,   // assumes DateOnly DTO
                 IsActive = true,
                 CreatedAt = now,
                 CreatedBy = userId
             });
             isFirst = false;
         }
-        foreach (var v in request.Vehicles)
-        {
-            Db.Vehicles.Add(new Vehicle
-            {
-                ApartmentId = apartmentId,
-                PersonId = person.IdPerson,
-                VehicleNumber = v.VehicleNumber.Trim(),
-                Make = v.Make,
-                Color = v.Color,
-                IsActive = true,
-                CreatedAt = now,
-                CreatedBy = userId
-            });
-        }
-        await Db.SaveChangesAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
-        return person.IdPerson;
-    }
 
-    public async Task UpdateAsync(
-        int apartmentId, int userId, int personId, CreateOwnerRequest request, CancellationToken cancellationToken = default)
-    {
-        var p = await Db.Persons.FirstOrDefaultAsync(x => x.IdPerson == personId && x.ApartmentId == apartmentId, cancellationToken);
-        if (p is null) throw new InvalidOperationException("Owner not found.");
-        p.FullName = request.FullName.Trim();
-        p.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email!.Trim();
-        p.PhoneNumber = request.PhoneNumber.Trim();
-        p.AlternatePhone = request.AlternatePhone;
-        p.IdentityDocTypeId = request.IdentityDocTypeId;
-        p.IdentityDocNumber = request.IdentityDocNumber;
-        p.PermanentAddress = request.PermanentAddress;
-        p.EmergencyContactName = request.EmergencyContactName;
-        p.EmergencyContactPhone = request.EmergencyContactPhone;
-        p.UpdatedAt = DateTime.UtcNow;
-        p.UpdatedBy = userId;
-        if (request.LinkedUnitIds is { Count: > 0 } uids)
+        // 3e. Vehicles — null-safe, skip blank numbers
+        if (request.Vehicles is { Count: > 0 } vehicles)
         {
-            var existing = await Db.UnitOwners
-                .Where(uo => uo.ApartmentId == apartmentId && uo.PersonId == personId && uo.IsActive)
-                .ToListAsync(cancellationToken);
-            foreach (var e in existing.Where(e => !uids.Contains(e.UnitId)))
+            foreach (var v in vehicles)
             {
-                e.IsActive = false;
-                e.UpdatedAt = DateTime.UtcNow;
-                e.UpdatedBy = userId;
-            }
-            var have = existing.Select(x => x.UnitId).ToHashSet();
-            var now = DateTime.UtcNow;
-            foreach (var uid in uids.Where(uid => !have.Contains(uid)))
-            {
-                Db.UnitOwners.Add(new UnitOwner
+                var vno = v.VehicleNumber?.Trim();
+                if (string.IsNullOrWhiteSpace(vno))
+                    continue;
+
+                Db.Vehicles.Add(new Vehicle
                 {
                     ApartmentId = apartmentId,
-                    UnitId = uid,
-                    PersonId = personId,
-                    IsPrimaryOwner = !existing.Any(x => x.IsPrimaryOwner),
-                    OwnershipFromDate = request.OwnershipFromDate.Date,
+                    PersonId = person.IdPerson,
+                    VehicleNumber = vno,
+                    Make = string.IsNullOrWhiteSpace(v.Make) ? null : v.Make!.Trim(),
+                    Color = string.IsNullOrWhiteSpace(v.Color) ? null : v.Color!.Trim(),
                     IsActive = true,
                     CreatedAt = now,
                     CreatedBy = userId
                 });
             }
         }
+
         await Db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return person.IdPerson;
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    //  UPDATE
+    // ────────────────────────────────────────────────────────────────────
+    public async Task UpdateAsync(
+        int apartmentId,
+        int userId,
+        int personId,
+        CreateOwnerRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var p = await Db.Persons.FirstOrDefaultAsync(
+            x => x.IdPerson == personId && x.ApartmentId == apartmentId,
+            cancellationToken);
+        if (p is null) throw new InvalidOperationException("Owner not found.");
+
+        var newPhone = request.PhoneNumber.Trim();
+        var newEmail = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email!.Trim();
+
+        // 1. Phone-change uniqueness check ───────────────────────────────
+        if (!string.Equals(p.PhoneNumber, newPhone, StringComparison.Ordinal))
+        {
+            var phoneTaken = await Db.Persons.AnyAsync(
+                x => x.ApartmentId == apartmentId
+                  && x.IdPerson != personId
+                  && x.PhoneNumber == newPhone
+                  && x.IsActive,
+                cancellationToken);
+            if (phoneTaken)
+                throw new InvalidOperationException("Phone number already exists in this apartment.");
+        }
+
+        await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+
+        // 2. Person scalar fields ────────────────────────────────────────
+        p.FullName = request.FullName.Trim();
+        p.Email = newEmail;
+        p.PhoneNumber = newPhone;
+        p.AlternatePhone = request.AlternatePhone;
+        p.IdentityDocTypeId = request.IdentityDocTypeId;
+        p.IdentityDocNumber = request.IdentityDocNumber;
+        p.PermanentAddress = request.PermanentAddress;
+        p.EmergencyContactName = request.EmergencyContactName;
+        p.EmergencyContactPhone = request.EmergencyContactPhone;
+        p.UpdatedAt = now;
+        p.UpdatedBy = userId;
+
+        // 2a. Mirror name / email / phone onto the linked Users row
+        if (p.LinkedUserId is int luid)
+        {
+            var u = await Db.Users.FirstOrDefaultAsync(
+                x => x.IdUser == luid, cancellationToken);
+            if (u is not null)
+            {
+                u.FullName = p.FullName;
+                if (newEmail is not null) u.Email = newEmail;
+                u.PhoneNumber = p.PhoneNumber;
+                u.UpdatedAt = now;
+                u.UpdatedBy = userId;
+            }
+        }
+
+        // 3. UnitOwners diff ─────────────────────────────────────────────
+        if (request.LinkedUnitIds is { Count: > 0 } rawUids)
+        {
+            var uids = rawUids.Distinct().ToHashSet();
+
+            var existing = await Db.UnitOwners
+                .Where(uo => uo.ApartmentId == apartmentId
+                          && uo.PersonId == personId
+                          && uo.IsActive)
+                .ToListAsync(cancellationToken);
+
+            // Soft-delete units the caller dropped
+            foreach (var e in existing.Where(e => !uids.Contains(e.UnitId)))
+            {
+                e.IsActive = false;
+                e.UpdatedAt = now;
+                e.UpdatedBy = userId;
+            }
+
+            // The "post-deactivation" view — used to know if a primary still exists
+            var stillActiveAfterDrop = existing
+                .Where(e => uids.Contains(e.UnitId))
+                .ToList();
+            var hasPrimaryAfterDrop = stillActiveAfterDrop.Any(e => e.IsPrimaryOwner);
+
+            // Pre-check: any newly-added unit must not already have a primary owner
+            var have = existing.Select(x => x.UnitId).ToHashSet();
+            var toAdd = uids.Where(uid => !have.Contains(uid)).ToList();
+
+            foreach (var uid in toAdd)
+            {
+                var taken = await Db.UnitOwners.AnyAsync(
+                    uo => uo.ApartmentId == apartmentId
+                       && uo.UnitId == uid
+                       && uo.PersonId != personId
+                       && uo.IsPrimaryOwner
+                       && uo.IsActive,
+                    cancellationToken);
+                if (taken)
+                    throw new InvalidOperationException($"Unit {uid} already has a primary owner.");
+            }
+
+            // Insert new rows; the very first one becomes primary if no
+            // primary survives the soft-delete step above.
+            var assignedFirst = hasPrimaryAfterDrop;
+            foreach (var uid in toAdd)
+            {
+                Db.UnitOwners.Add(new UnitOwner
+                {
+                    ApartmentId = apartmentId,
+                    UnitId = uid,
+                    PersonId = personId,
+                    IsPrimaryOwner = !assignedFirst,
+                    OwnershipFromDate = request.OwnershipFromDate,
+                    IsActive = true,
+                    CreatedAt = now,
+                    CreatedBy = userId
+                });
+                assignedFirst = true;
+            }
+        }
+
+        // 4. Vehicles diff ───────────────────────────────────────────────
+        await ReconcileVehiclesAsync(apartmentId, userId, personId, request.Vehicles, now, cancellationToken);
+
+        await Db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+    }
     public async Task<IdProofResultDto> UploadIdProofAsync(
         int apartmentId, int userId, int personId, Stream fileStream, string fileName, string? documentCategoryCode,
         CancellationToken cancellationToken = default)
