@@ -33,4 +33,7 @@ public sealed class UnitOwner
 
     [Precision(18, 2)]
     public decimal? TransferValue { get; set; }
+
+    [Precision(5, 2)]
+    public decimal? OwnershipSharePct { get; set; }
 }

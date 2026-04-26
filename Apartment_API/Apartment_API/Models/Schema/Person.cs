@@ -52,4 +52,18 @@ public sealed class Person
     [Column(TypeName = "nvarchar(max)")]
     public string? EmergencyContactPhone { get; set; }
     public int? ParentOwnerId { get; set; }
+
+    [MaxLength(30)]
+    public string? Relationship { get; set; }
+
+    [MaxLength(20)]
+    public string? Gender { get; set; }
+
+    public int? Age { get; set; }
+
+    [MaxLength(500)]
+    public string? SpecialNotes { get; set; }
+
+    [MaxLength(500)]
+    public string? PermanentAddress { get; set; }
 }

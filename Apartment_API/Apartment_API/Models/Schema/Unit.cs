@@ -13,6 +13,8 @@ public sealed class Unit
 
     public int ApartmentId { get; set; }
 
+    public int? BlockId { get; set; }
+
     [Required, MaxLength(20)]
     public string UnitNumber { get; set; } = string.Empty;
 

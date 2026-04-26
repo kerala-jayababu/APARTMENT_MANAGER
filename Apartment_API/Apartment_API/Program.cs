@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,6 +75,13 @@ builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
 builder.Services.AddScoped<IIncomeHeadService, IncomeHeadService>();
 builder.Services.AddScoped<IVendorService, VendorService>();
+builder.Services.AddScoped<IBlockService, BlockService>();
+builder.Services.AddScoped<IUnitResidentService, UnitResidentService>();
+builder.Services.AddScoped<IOwnerResidentService, OwnerResidentService>();
+builder.Services.AddScoped<ICoOwnerResidentService, CoOwnerResidentService>();
+builder.Services.AddScoped<ITenantResidentService, TenantResidentService>();
+builder.Services.AddScoped<IFamilyMemberResidentService, FamilyMemberResidentService>();
+builder.Services.AddScoped<IOwnershipTransferResidentService, OwnershipTransferResidentService>();
 builder.Services
     .AddApiVersioning(options =>
     {
@@ -103,6 +111,13 @@ app.UseSwaggerUI(options =>
     }
 });
 app.UseHttpsRedirection();
+var uploadRoot = Path.Combine(app.Environment.ContentRootPath, "Uploads");
+Directory.CreateDirectory(uploadRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadRoot),
+    RequestPath = "/uploads"
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapGet("/", () => Results.Redirect("/swagger"));
