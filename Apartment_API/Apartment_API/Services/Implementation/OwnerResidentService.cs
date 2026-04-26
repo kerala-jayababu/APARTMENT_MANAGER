@@ -1,4 +1,5 @@
-﻿using Apartment_API.Data;
+﻿using System.Security.Cryptography;
+using Apartment_API.Data;
 using Apartment_API.DTO;
 using Apartment_API.Helpers;
 using Apartment_API.Models;
@@ -8,8 +9,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Apartment_API.Services.Implementation;
 
-public sealed class OwnerResidentService(AppDbContext db, IWebHostEnvironment env) : ResidentServiceBase(db, env), IOwnerResidentService
+public sealed class OwnerResidentService(
+    AppDbContext db,
+    IWebHostEnvironment env,
+    IPasswordHasher passwordHasher) : ResidentServiceBase(db, env), IOwnerResidentService
 {
+    private readonly IPasswordHasher _passwordHasher = passwordHasher;
     public async Task<PagedResult<OwnerListDto>> ListAsync(
         int apartmentId, string? search, bool? isActive, int page, int pageSize, CancellationToken cancellationToken = default)
     {
@@ -414,5 +419,65 @@ public sealed class OwnerResidentService(AppDbContext db, IWebHostEnvironment en
         Db.StoredDocuments.Add(doc);
         await Db.SaveChangesAsync(cancellationToken);
         return new IdProofResultDto { DocumentId = doc.IdDocument, FileUrl = url };
+    }
+
+    private async Task<int> RequireRoleIdAsync(string roleCode, CancellationToken cancellationToken = default)
+    {
+        var code = roleCode.Trim();
+        var id = await Db.AppRoles.AsNoTracking()
+            .Where(r => r.IsActive && r.RoleCode == code)
+            .Select(r => r.IdRole)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (id == 0)
+        {
+            var roles = await Db.AppRoles.AsNoTracking()
+                .Where(r => r.IsActive)
+                .ToListAsync(cancellationToken);
+            var match = roles.FirstOrDefault(r =>
+                string.Equals(r.RoleCode, code, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) id = match.IdRole;
+        }
+        if (id == 0)
+            throw new InvalidOperationException($"App role not found: {code}.");
+        return id;
+    }
+
+    private string GenerateOtpOnlyPasswordHash() =>
+        _passwordHasher.Hash(Convert.ToBase64String(RandomNumberGenerator.GetBytes(48)));
+
+    private async Task ReconcileVehiclesAsync(
+        int apartmentId,
+        int userId,
+        int personId,
+        List<VehicleRequestItem>? vehicles,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await Db.Vehicles
+            .Where(ve => ve.ApartmentId == apartmentId && ve.PersonId == personId)
+            .ToListAsync(cancellationToken);
+        foreach (var ev in existing)
+        {
+            ev.IsActive = false;
+            ev.UpdatedAt = now;
+            ev.UpdatedBy = userId;
+        }
+        if (vehicles is not { Count: > 0 }) return;
+        foreach (var vr in vehicles)
+        {
+            var vno = vr.VehicleNumber?.Trim();
+            if (string.IsNullOrWhiteSpace(vno)) continue;
+            Db.Vehicles.Add(new Vehicle
+            {
+                ApartmentId = apartmentId,
+                PersonId = personId,
+                VehicleNumber = vno,
+                Make = string.IsNullOrWhiteSpace(vr.Make) ? null : vr.Make!.Trim(),
+                Color = string.IsNullOrWhiteSpace(vr.Color) ? null : vr.Color!.Trim(),
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            });
+        }
     }
 }
