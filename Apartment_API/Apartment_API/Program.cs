@@ -55,6 +55,7 @@ builder.Services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IApartmentService, ApartmentService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IGlobalMasterDataService, GlobalMasterDataService>();
 builder.Services
     .AddApiVersioning(options =>
     {
