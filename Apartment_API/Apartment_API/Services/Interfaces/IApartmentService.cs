@@ -1,6 +1,6 @@
 using Apartment_API.DTO;
 
-namespace Apartment_API.Services;
+namespace Apartment_API.Services.Interfaces;
 
 public interface IApartmentService
 {

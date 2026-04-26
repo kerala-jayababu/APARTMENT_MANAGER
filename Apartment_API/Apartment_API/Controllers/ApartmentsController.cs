@@ -1,30 +1,36 @@
 using Asp.Versioning;
 using Apartment_API.DTO;
-using Apartment_API.Services;
+using Apartment_API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Apartment_API.Controllers;
 
 [ApiController]
+[Authorize]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 public sealed class ApartmentsController(
     IApartmentService apartmentService,
+    ICurrentUser currentUser,
     ILogger<ApartmentsController> logger) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyCollection<ApartmentDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyCollection<ApartmentDto>>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyCollection<ApartmentDto>>), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ApiResponseDto<IReadOnlyCollection<ApartmentDto>>>> GetAll(
         CancellationToken cancellationToken)
     {
         try
         {
+            // currentUser is filled from the JWT when [Authorize] succeeds (email, name, phone, id).
+            var who = currentUser.Email ?? "unknown";
             var data = await apartmentService.GetAllAsync(cancellationToken);
             return Ok(new ApiResponseDto<IReadOnlyCollection<ApartmentDto>>
             {
                 Success = true,
-                Message = "Apartments loaded successfully.",
+                Message = $"Apartments loaded for {who}.",
                 Data = data
             });
         }

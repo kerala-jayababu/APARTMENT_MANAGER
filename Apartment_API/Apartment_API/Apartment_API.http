@@ -1,6 +1,25 @@
 @Apartment_API_HostAddress = http://localhost:5146
 
+### Request login OTP (email in body)
+POST {{Apartment_API_HostAddress}}/api/v1/Auth/login-otp/request
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+
+### Verify login OTP
+POST {{Apartment_API_HostAddress}}/api/v1/Auth/login-otp/verify
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "otp": "123456"
+}
+
+### Apartments (set @token after login-otp/verify)
 GET {{Apartment_API_HostAddress}}/api/v1/Apartments
 Accept: application/json
+Authorization: Bearer {{token}}
 
 ###
