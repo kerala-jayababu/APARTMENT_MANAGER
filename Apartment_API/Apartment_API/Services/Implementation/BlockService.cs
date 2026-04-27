@@ -8,6 +8,9 @@ namespace Apartment_API.Services.Implementation;
 
 public sealed class BlockService(AppDbContext db) : IBlockService
 {
+    private const int BlockNameMaxLength = 20;
+    private const int DescriptionMaxLength = 200;
+
     public async Task<IReadOnlyList<BlockListDto>> ListAsync(
         int apartmentId, string? search, bool? isActive, CancellationToken cancellationToken = default)
     {
@@ -19,7 +22,7 @@ public sealed class BlockService(AppDbContext db) : IBlockService
             var s = search.Trim();
             q = q.Where(b => b.BlockCode.Contains(s) || b.BlockName.Contains(s));
         }
-        var list = await q.OrderBy(b => b.BlockCode).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var list = await q.OrderBy(b => b.BlockName).ThenBy(b => b.IdBlock).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (list.Count == 0) return [];
 
         var vacantIdList = await db.UnitStatuses.AsNoTracking()
@@ -55,7 +58,6 @@ public sealed class BlockService(AppDbContext db) : IBlockService
             result.Add(new BlockListDto
             {
                 Id = b.IdBlock,
-                BlockCode = b.BlockCode,
                 BlockName = b.BlockName,
                 TotalFloors = b.TotalFloors,
                 TotalUnits = b.TotalUnits,
@@ -78,20 +80,26 @@ public sealed class BlockService(AppDbContext db) : IBlockService
     public async Task<int> CreateAsync(
         int apartmentId, int userId, CreateBlockRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.BlockCode) || string.IsNullOrWhiteSpace(request.BlockName))
-            throw new InvalidOperationException("BlockCode and BlockName are required.");
+        if (string.IsNullOrWhiteSpace(request.BlockName))
+            throw new InvalidOperationException("BlockName is required.");
         if (request.TotalFloors is < 1 or > 100) throw new InvalidOperationException("totalFloors must be 1-100.");
         if (request.TotalUnits is < 1 or > 500) throw new InvalidOperationException("totalUnits must be 1-500.");
-        var code = request.BlockCode.Trim();
-        var exists = await db.Blocks.AnyAsync(
-            b => b.ApartmentId == apartmentId && b.BlockCode == code && b.IsActive,
+        var name = request.BlockName.Trim();
+        if (name.Length is 0 or > BlockNameMaxLength)
+            throw new InvalidOperationException($"BlockName must be 1–{BlockNameMaxLength} characters.");
+        if (!string.IsNullOrWhiteSpace(request.Description) && request.Description.Trim().Length > DescriptionMaxLength)
+            throw new InvalidOperationException($"Description must be at most {DescriptionMaxLength} characters.");
+        var nameTaken = await db.Blocks.AnyAsync(
+            b => b.ApartmentId == apartmentId && b.IsActive
+                 && (b.BlockName == name || b.BlockCode == name),
             cancellationToken).ConfigureAwait(false);
-        if (exists) throw new InvalidOperationException("BlockCode must be unique within the apartment.");
+        if (nameTaken) throw new InvalidOperationException("A block with this name already exists in the apartment.");
         var e = new Block
         {
             ApartmentId = apartmentId,
-            BlockCode = code,
-            BlockName = request.BlockName.Trim(),
+            // Legacy column: keep in sync with display name (single M02 field).
+            BlockCode = name,
+            BlockName = name,
             TotalFloors = (byte)request.TotalFloors,
             TotalUnits = (short)request.TotalUnits,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description!.Trim(),
@@ -110,9 +118,22 @@ public sealed class BlockService(AppDbContext db) : IBlockService
         var b = await db.Blocks.FirstOrDefaultAsync(
             x => x.IdBlock == id && x.ApartmentId == apartmentId, cancellationToken).ConfigureAwait(false);
         if (b is null) throw new InvalidOperationException("Block not found.");
+        if (string.IsNullOrWhiteSpace(request.BlockName))
+            throw new InvalidOperationException("BlockName is required.");
         if (request.TotalFloors is < 1 or > 100) throw new InvalidOperationException("totalFloors must be 1-100.");
         if (request.TotalUnits is < 1 or > 500) throw new InvalidOperationException("totalUnits must be 1-500.");
-        b.BlockName = request.BlockName.Trim();
+        var name = request.BlockName.Trim();
+        if (name.Length is 0 or > BlockNameMaxLength)
+            throw new InvalidOperationException($"BlockName must be 1–{BlockNameMaxLength} characters.");
+        if (!string.IsNullOrWhiteSpace(request.Description) && request.Description.Trim().Length > DescriptionMaxLength)
+            throw new InvalidOperationException($"Description must be at most {DescriptionMaxLength} characters.");
+        var nameTaken = await db.Blocks.AnyAsync(
+            x => x.ApartmentId == apartmentId && x.IsActive && x.IdBlock != id
+                 && (x.BlockName == name || x.BlockCode == name),
+            cancellationToken).ConfigureAwait(false);
+        if (nameTaken) throw new InvalidOperationException("A block with this name already exists in the apartment.");
+        b.BlockCode = name;
+        b.BlockName = name;
         b.TotalFloors = (byte)request.TotalFloors;
         b.TotalUnits = (short)request.TotalUnits;
         b.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description!.Trim();

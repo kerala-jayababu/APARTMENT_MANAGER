@@ -1,5 +1,6 @@
 using Apartment_API.Data;
 using Apartment_API.DTO;
+using Apartment_API.Helpers;
 using Apartment_API.Models;
 using Apartment_API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -387,9 +388,17 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             }
             var changedBy = await db.Users.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IdUser == h.ChangedByUserId, cancellationToken);
-            var lpName = h.LinkedPersonId is { } lpid
-                ? (await db.Persons.AsNoTracking().FirstOrDefaultAsync(p => p.IdPerson == lpid, cancellationToken))?.FullName
-                : null;
+            string? lpName = null;
+            string? lpRole = null;
+            if (h.LinkedPersonId is { } lpid)
+            {
+                var lp = await db.Persons.AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.IdPerson == lpid, cancellationToken)
+                    .ConfigureAwait(false);
+                lpName = lp?.FullName;
+                lpRole = await ResolveLinkedPersonRoleAsync(apartmentId, h.UnitId, lpid, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             items.Add(new UnitStatusHistoryDto
             {
                 Id = h.IdUnitStatusHistory,
@@ -400,7 +409,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
                 NewStatus = nSt.StatusName,
                 EffectiveDate = h.EffectiveDate,
                 LinkedPersonName = lpName,
-                LinkedPersonRole = null,
+                LinkedPersonRole = lpRole,
                 Reason = h.Reason,
                 ChangedByName = changedBy?.FullName,
                 ChangedAt = h.ChangedAt
@@ -415,5 +424,35 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         var r = await GetStatusHistoryAsync(apartmentId, unitId, null, null, 1, 500, cancellationToken)
             .ConfigureAwait(false);
         return r.Items.ToList();
+    }
+
+    /// <summary>Label for "Name (Role)" in status history: unit-scoped owner/tenant, else person type name.</summary>
+    private async Task<string?> ResolveLinkedPersonRoleAsync(
+        int apartmentId, int unitId, int personId, CancellationToken cancellationToken)
+    {
+        var personTypeRow = await (
+            from p in db.Persons.AsNoTracking()
+            where p.IdPerson == personId && p.ApartmentId == apartmentId
+            join pt in db.PersonTypes.AsNoTracking() on p.PersonTypeId equals pt.IdPersonType
+            select new { pt.PersonTypeCode, pt.PersonTypeName }
+        ).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (personTypeRow is null) return null;
+
+        var isUnitOwner = await db.UnitOwners.AsNoTracking().AnyAsync(
+            uo => uo.ApartmentId == apartmentId && uo.UnitId == unitId && uo.PersonId == personId && uo.IsActive,
+            cancellationToken).ConfigureAwait(false);
+        if (isUnitOwner)
+        {
+            if (string.Equals(personTypeRow.PersonTypeCode, PersonTypeCodes.CoOwner, StringComparison.OrdinalIgnoreCase))
+                return "Co-owner";
+            return "Owner";
+        }
+
+        var isTenant = await db.TenantAssignments.AsNoTracking().AnyAsync(
+            ta => ta.ApartmentId == apartmentId && ta.UnitId == unitId && ta.PersonId == personId && ta.IsActive,
+            cancellationToken).ConfigureAwait(false);
+        if (isTenant) return "Tenant";
+
+        return string.IsNullOrWhiteSpace(personTypeRow.PersonTypeName) ? null : personTypeRow.PersonTypeName;
     }
 }

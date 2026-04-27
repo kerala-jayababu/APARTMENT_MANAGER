@@ -29,6 +29,7 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
             prev = o.PersonId;
         }
         var now = DateTime.UtcNow;
+        var transferValue = request.TransferValue ?? 0m;
         Db.UnitOwners.Add(new UnitOwner
         {
             ApartmentId = apartmentId,
@@ -39,7 +40,7 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
             IsActive = true,
             CreatedAt = now,
             CreatedBy = userId,
-            TransferValue = request.TransferValue
+            TransferValue = transferValue
         });
         u.IdCurrentOwner = request.NewOwnerPersonId;
         u.UpdatedAt = now;
@@ -53,7 +54,7 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
             TransferType = request.TransferType,
             TransferDate = request.TransferDate.Date,
             SaleDeedReference = request.SaleDeedReference,
-            TransferValue = request.TransferValue,
+            TransferValue = transferValue,
             Remarks = request.Remarks,
             RecordedByUserId = userId,
             RecordedAt = now

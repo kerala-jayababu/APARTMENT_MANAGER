@@ -9,6 +9,8 @@ public sealed class OwnerListDto
     public string? PhoneNumber { get; init; }
     public IReadOnlyList<string> LinkedUnits { get; init; } = [];
     public string? IdentityDocType { get; init; }
+    /// <summary>ID document value from Person (e.g. masked on client); type may be in <see cref="IdentityDocType" />.</summary>
+    public string? IdentityDocNumber { get; init; }
     public int VehicleCount { get; init; }
     public IReadOnlyList<string> VehicleNumbers { get; init; } = [];
     public bool IsActive { get; init; }

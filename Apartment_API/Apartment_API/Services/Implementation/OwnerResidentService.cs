@@ -28,18 +28,37 @@ public sealed class OwnerResidentService(
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s2 = search!.Trim();
-            q = q.Where(p => p.FullName.Contains(s2) || (p.PhoneNumber != null && p.PhoneNumber.Contains(s2)) || (p.Email != null && p.Email.Contains(s2)));
+            var personIdsMatchingUnit = await (
+                from uol in Db.UnitOwners.AsNoTracking()
+                where uol.ApartmentId == apartmentId && uol.IsActive
+                join u in Db.Units.AsNoTracking() on uol.UnitId equals u.IdUnit
+                where u.ApartmentId == apartmentId && u.IsActive && u.UnitNumber.Contains(s2)
+                join p in Db.Persons.AsNoTracking() on uol.PersonId equals p.IdPerson
+                where p.ApartmentId == apartmentId && p.PersonTypeId == ownerTypeId
+                select p.IdPerson).Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
+            q = q.Where(p =>
+                p.FullName.Contains(s2)
+                || (p.PhoneNumber != null && p.PhoneNumber.Contains(s2))
+                || (p.Email != null && p.Email.Contains(s2))
+                || personIdsMatchingUnit.Contains(p.IdPerson));
         }
         var total = await q.CountAsync(cancellationToken);
         var persons = await q.OrderBy(p => p.FullName).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
         if (persons.Count == 0) return new PagedResult<OwnerListDto> { Items = [], TotalCount = total, Page = page, PageSize = pageSize };
         var ids = persons.Select(p => p.IdPerson).ToList();
         var idTypes = await Db.IdentityDocTypes.AsNoTracking().ToDictionaryAsync(x => x.IdIdentityDocType, x => x.DocTypeName, cancellationToken);
-        var uo = await (from t in Db.UnitOwners.AsNoTracking()
-            where t.ApartmentId == apartmentId && t.IsActive && t.IsPrimaryOwner && ids.Contains(t.PersonId)
+        var unitOwnerRows = await (from t in Db.UnitOwners.AsNoTracking()
+            where t.ApartmentId == apartmentId && t.IsActive && ids.Contains(t.PersonId)
             join u in Db.Units.AsNoTracking() on t.UnitId equals u.IdUnit
-            select new { t.PersonId, u.UnitNumber }).ToListAsync(cancellationToken);
-        var unitsByP = uo.GroupBy(x => x.PersonId).ToDictionary(g => g.Key, g => g.Select(x => x.UnitNumber).ToList());
+            where u.ApartmentId == apartmentId && u.IsActive
+            orderby u.UnitNumber
+            select new { t.PersonId, u.UnitNumber }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var unitsByP = unitOwnerRows
+            .GroupBy(x => x.PersonId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(x => x.UnitNumber).Distinct()
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList());
         var veh = await Db.Vehicles.AsNoTracking()
             .Where(v => v.ApartmentId == apartmentId && v.IsActive && ids.Contains(v.PersonId))
             .ToListAsync(cancellationToken);
@@ -52,6 +71,7 @@ public sealed class OwnerResidentService(
             PhoneNumber = p.PhoneNumber,
             LinkedUnits = unitsByP.TryGetValue(p.IdPerson, out var lu) ? lu : [],
             IdentityDocType = p.IdentityDocTypeId is { } i && idTypes.TryGetValue(i, out var n) ? n : null,
+            IdentityDocNumber = string.IsNullOrWhiteSpace(p.IdentityDocNumber) ? null : p.IdentityDocNumber.Trim(),
             VehicleCount = vehG.FirstOrDefault(g => g.Key == p.IdPerson)?.Count() ?? 0,
             VehicleNumbers = vehG.FirstOrDefault(g => g.Key == p.IdPerson)?.Select(v => v.VehicleNumber).ToList() ?? [],
             IsActive = p.IsActive

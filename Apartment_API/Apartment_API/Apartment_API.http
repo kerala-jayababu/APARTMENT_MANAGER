@@ -22,4 +22,46 @@ GET {{Apartment_API_HostAddress}}/api/v1/Apartments
 Accept: application/json
 Authorization: Bearer {{token}}
 
+### Tenant access token (use AccessToken from response as {{token}} for committee APIs — must include apartment_id claim)
+# POST {{Apartment_API_HostAddress}}/api/v1/Auth/tenant-access-token
+# Authorization: Bearer <ApartmentSelectionToken>
+
+# --- Committee (JWT must be tenant/apartment scoped, not bare login token) ---
+@token = REPLACE_WITH_ACCESS_TOKEN_FROM_TENANT_FLOW
+
+### List MC tenures
+GET {{Apartment_API_HostAddress}}/api/v1/committee-tenures?includeArchived=true&page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Active tenure (detail + embedded members)
+GET {{Apartment_API_HostAddress}}/api/v1/committee-tenures/active
+Authorization: Bearer {{token}}
+
+### Create tenure (~1–3 years between dates required: 350–1125 days)
+POST {{Apartment_API_HostAddress}}/api/v1/committee-tenures
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tenureStartDate": "2026-04-01",
+  "tenureEndDate": "2027-06-01",
+  "notes": "HTTP test term"
+}
+
+### List committee members (optional filters)
+GET {{Apartment_API_HostAddress}}/api/v1/committee-members?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Assign member (replace ids from your DB: tenure, person, role)
+POST {{Apartment_API_HostAddress}}/api/v1/committee-members
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "committeeTenureId": 1,
+  "personId": 1,
+  "committeeRoleId": 1,
+  "effectiveFromDate": "2026-04-01"
+}
+
 ###
