@@ -27,4 +27,6 @@ public sealed class ExpenseHead
 
     [Column("LedgerAccountID")]
     public int? LedgerAccountId { get; set; }
+
+    public int? MainHeadId { get; set; }
 }

@@ -74,6 +74,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IGlobalMasterDataService, GlobalMasterDataService>();
 builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
+builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IIncomeHeadService, IncomeHeadService>();
 builder.Services.AddScoped<IVendorService, VendorService>();
 builder.Services.AddScoped<IBlockService, BlockService>();

@@ -23,6 +23,7 @@ public sealed class Budget
 
     [MaxLength(500)]
     public string? Remarks { get; set; }
+    public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }
     public int CreatedBy { get; set; }

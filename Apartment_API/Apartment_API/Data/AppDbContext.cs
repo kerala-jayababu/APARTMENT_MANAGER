@@ -31,7 +31,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<VendorType> VendorTypes => Set<VendorType>();
 
     public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<BudgetHeader> BudgetHeaders => Set<BudgetHeader>();
+    public DbSet<BudgetRevision> BudgetRevisions => Set<BudgetRevision>();
     public DbSet<ExpenseHead> ExpenseHeads => Set<ExpenseHead>();
+    public DbSet<ExpenseMainHead> ExpenseMainHeads => Set<ExpenseMainHead>();
     public DbSet<IncomeHead> IncomeHeads => Set<IncomeHead>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
 
