@@ -40,6 +40,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<BudgetRevision> BudgetRevisions => Set<BudgetRevision>();
     public DbSet<ExpenseHead> ExpenseHeads => Set<ExpenseHead>();
     public DbSet<ExpenseMainHead> ExpenseMainHeads => Set<ExpenseMainHead>();
+    public DbSet<ExpenseBill> ExpenseBills => Set<ExpenseBill>();
+    public DbSet<ExpenseBillLine> ExpenseBillLines => Set<ExpenseBillLine>();
+    public DbSet<ExpensePayment> ExpensePayments => Set<ExpensePayment>();
+    public DbSet<ExpenseBillPayment> ExpenseBillPayments => Set<ExpenseBillPayment>();
     public DbSet<FiscalYear> FiscalYears => Set<FiscalYear>();
     public DbSet<IncomeHead> IncomeHeads => Set<IncomeHead>();
     public DbSet<Vendor> Vendors => Set<Vendor>();

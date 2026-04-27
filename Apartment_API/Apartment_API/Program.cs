@@ -76,6 +76,7 @@ builder.Services.AddScoped<IApprovalRuleService, ApprovalRuleService>();
 builder.Services.AddScoped<IAmenityService, AmenityService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<ICollectionsService, CollectionsService>();
+builder.Services.AddScoped<IExpenseManagementService, ExpenseManagementService>();
 builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
