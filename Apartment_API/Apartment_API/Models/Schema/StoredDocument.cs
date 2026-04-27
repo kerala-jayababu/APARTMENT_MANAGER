@@ -17,6 +17,9 @@ public sealed class StoredDocument
     [Required, MaxLength(300)]
     public string DocumentName { get; set; } = string.Empty;
 
+    [MaxLength(300)]
+    public string? Description { get; set; }
+
     [MaxLength(500)]
     public string? FileUrl { get; set; }
     public int? FileSizeKb { get; set; }
@@ -35,4 +38,6 @@ public sealed class StoredDocument
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public int CreatedBy { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public int? UpdatedBy { get; set; }
 }
