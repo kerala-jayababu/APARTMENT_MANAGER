@@ -32,6 +32,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<PaymentReceipt> PaymentReceipts => Set<PaymentReceipt>();
+    public DbSet<InvoiceReceipt> InvoiceReceipts => Set<InvoiceReceipt>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<BudgetHeader> BudgetHeaders => Set<BudgetHeader>();
     public DbSet<BudgetRevision> BudgetRevisions => Set<BudgetRevision>();
