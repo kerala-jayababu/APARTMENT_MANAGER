@@ -43,6 +43,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<Apartment> Apartments => Set<Apartment>();
     public DbSet<ApartmentUser> ApartmentUsers => Set<ApartmentUser>();
+    public DbSet<ApprovalFlow> ApprovalFlows => Set<ApprovalFlow>();
     public DbSet<Amenity> Amenities => Set<Amenity>();
     public DbSet<AmenityBooking> AmenityBookings => Set<AmenityBooking>();
     public DbSet<CommitteeTenure> CommitteeTenures => Set<CommitteeTenure>();
