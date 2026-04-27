@@ -14,6 +14,7 @@ namespace Apartment_API.Controllers;
 public sealed class UnitsController(
     IUnitResidentService units,
     IOwnershipTransferResidentService ownership,
+    IMmcService mmc,
     ICurrentUser currentUser,
     ILogger<UnitsController> logger) : ControllerBase
 {
@@ -151,6 +152,26 @@ public sealed class UnitsController(
         {
             logger.LogError(ex, "GetOwnershipHistory {Id}.", id);
             return ServerError<IReadOnlyList<OwnershipHistoryItemDto>>();
+        }
+    }
+
+    [HttpGet("{id:int}/mmc-history")]
+    [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<UnitMmcHistoryDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponseDto<IReadOnlyList<UnitMmcHistoryDto>>>> GetMmcHistory(
+        [FromRoute] int id,
+        CancellationToken cancellationToken = default)
+    {
+        if (currentUser.IdApartment is not { } apartmentId)
+            return ForbiddenNoApartment<IReadOnlyList<UnitMmcHistoryDto>>();
+        try
+        {
+            var data = await mmc.GetUnitHistoryAsync(apartmentId, id, cancellationToken);
+            return Ok(new ApiResponseDto<IReadOnlyList<UnitMmcHistoryDto>> { Success = true, Message = "MMC history loaded.", Data = data });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "GetMmcHistory {Id}.", id);
+            return ServerError<IReadOnlyList<UnitMmcHistoryDto>>();
         }
     }
 

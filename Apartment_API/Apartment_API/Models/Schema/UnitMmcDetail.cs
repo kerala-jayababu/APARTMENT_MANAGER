@@ -13,6 +13,7 @@ public sealed class UnitMmcDetail
 
     public int ApartmentId { get; set; }
     public int UnitId { get; set; }
+    public int? IdMmcPeriod { get; set; }
     public int IncomeHeadId { get; set; }
 
     [Precision(10, 2)]

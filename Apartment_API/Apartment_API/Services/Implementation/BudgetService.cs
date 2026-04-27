@@ -38,7 +38,8 @@ public sealed class BudgetService(AppDbContext db) : IBudgetService
             ActualAmount = lines.Sum(x => x.ActualAmount)
         };
 
-        var users = await LoadUserNamesAsync(apartmentId, header?.SubmittedByUserId, header?.ApprovedByUserId, cancellationToken)
+        var (submittedByName, approvedByName) = await LoadUserNamesAsync(
+                apartmentId, header?.SubmittedByUserId, header?.ApprovedByUserId, cancellationToken)
             .ConfigureAwait(false);
 
         return new BudgetDetailDto
@@ -47,9 +48,9 @@ public sealed class BudgetService(AppDbContext db) : IBudgetService
             FyCode = fy.FyCode,
             Status = header?.StatusCode ?? StatusDraft,
             SubmittedAt = header?.SubmittedAt,
-            SubmittedByName = users.GetValueOrDefault(header?.SubmittedByUserId),
+            SubmittedByName = submittedByName,
             ApprovedAt = header?.ApprovedAt,
-            ApprovedByName = users.GetValueOrDefault(header?.ApprovedByUserId),
+            ApprovedByName = approvedByName,
             Lines = lines,
             Totals = totals
         };
@@ -205,19 +206,18 @@ public sealed class BudgetService(AppDbContext db) : IBudgetService
             .ToList();
     }
 
-    private async Task<Dictionary<int?, string?>> LoadUserNamesAsync(
+    private async Task<(string? SubmittedByName, string? ApprovedByName)> LoadUserNamesAsync(
         int apartmentId, int? submittedById, int? approvedById, CancellationToken cancellationToken)
     {
+        _ = apartmentId;
         var ids = new[] { submittedById, approvedById }.Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
-        if (ids.Count == 0) return new Dictionary<int?, string?>();
+        if (ids.Count == 0) return (null, null);
         var names = await db.Users.AsNoTracking()
             .Where(u => ids.Contains(u.IdUser))
             .ToDictionaryAsync(x => x.IdUser, x => x.FullName, cancellationToken)
             .ConfigureAwait(false);
-        return new Dictionary<int?, string?>
-        {
-            [submittedById] = submittedById is { } s && names.TryGetValue(s, out var sn) ? sn : null,
-            [approvedById] = approvedById is { } a && names.TryGetValue(a, out var an) ? an : null
-        };
+        var submitted = submittedById is { } s && names.TryGetValue(s, out var sn) ? sn : null;
+        var approved = approvedById is { } a && names.TryGetValue(a, out var an) ? an : null;
+        return (submitted, approved);
     }
 }

@@ -44,6 +44,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CommitteeTenure> CommitteeTenures => Set<CommitteeTenure>();
     public DbSet<CommitteeMember> CommitteeMembers => Set<CommitteeMember>();
     public DbSet<CommitteeTenureExtensionLog> CommitteeTenureExtensionLogs => Set<CommitteeTenureExtensionLog>();
+    public DbSet<MmcPeriod> MmcPeriods => Set<MmcPeriod>();
+    public DbSet<MmcBatch> MmcBatches => Set<MmcBatch>();
+    public DbSet<MmcBatchLine> MmcBatchLines => Set<MmcBatchLine>();
 
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<Unit> Units => Set<Unit>();
