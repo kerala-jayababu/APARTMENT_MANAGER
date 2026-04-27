@@ -72,6 +72,7 @@ builder.Services.AddScoped<IApartmentAuthService, ApartmentAuthService>();
 builder.Services.AddScoped<IApartmentService, ApartmentService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IGlobalMasterDataService, GlobalMasterDataService>();
+builder.Services.AddScoped<IAmenityService, AmenityService>();
 builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();

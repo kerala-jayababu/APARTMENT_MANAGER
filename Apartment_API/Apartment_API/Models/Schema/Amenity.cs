@@ -13,6 +13,7 @@ public sealed class Amenity
 
     public int ApartmentId { get; set; }
     public int AmenityTypeId { get; set; }
+    public int IncomeHeadId { get; set; }
 
     [Required, MaxLength(150)]
     public string AmenityName { get; set; } = string.Empty;
@@ -27,6 +28,7 @@ public sealed class Amenity
     public decimal ChargeAmount { get; set; }
 
     public byte AdvanceBookingDays { get; set; }
+    public int MaxContinuousSessionsAllowed { get; set; }
 
     [MaxLength(2000)]
     public string? Rules { get; set; }
