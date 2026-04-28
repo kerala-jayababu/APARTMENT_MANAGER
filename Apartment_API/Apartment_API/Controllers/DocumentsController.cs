@@ -76,10 +76,10 @@ public sealed class DocumentsController(
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponseDto<IdResultDto>), StatusCodes.Status201Created)]
     public async Task<ActionResult<ApiResponseDto<IdResultDto>>> Upload(
-        [FromForm] UploadDocumentRequest request,
-        [FromForm] IFormFile? file,
+        [FromForm] UploadDocumentFormRequest request,
         CancellationToken cancellationToken = default)
     {
+        var file = request.File;
         if (file is null || file.Length == 0)
             return BadRequest(new ApiResponseDto<IdResultDto> { Success = false, Message = "file is required.", Errors = ["VALIDATION_FAILED"] });
         if (currentUser.IdUser is not { } userId)
@@ -87,7 +87,16 @@ public sealed class DocumentsController(
         if (currentUser.IdApartment is not { } apartmentId) return ForbiddenNoApartment<IdResultDto>();
         try
         {
-            var id = await service.UploadAsync(apartmentId, userId, request, file, cancellationToken);
+            var uploadRequest = new UploadDocumentRequest
+            {
+                DocumentName = request.DocumentName,
+                Description = request.Description,
+                CategoryId = request.CategoryId,
+                LinkedEntityType = request.LinkedEntityType,
+                LinkedEntityId = request.LinkedEntityId,
+                ExpiryDate = request.ExpiryDate
+            };
+            var id = await service.UploadAsync(apartmentId, userId, uploadRequest, file, cancellationToken);
             return StatusCode(StatusCodes.Status201Created,
                 new ApiResponseDto<IdResultDto> { Success = true, Message = "Document uploaded.", Data = new IdResultDto { Id = id } });
         }

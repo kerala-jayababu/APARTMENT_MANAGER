@@ -49,6 +49,17 @@ public sealed class UploadDocumentRequest
     public DateTime? ExpiryDate { get; set; }
 }
 
+public sealed class UploadDocumentFormRequest
+{
+    public string DocumentName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int CategoryId { get; set; }
+    public string LinkedEntityType { get; set; } = "COMPLEX";
+    public int? LinkedEntityId { get; set; }
+    public DateTime? ExpiryDate { get; set; }
+    public Microsoft.AspNetCore.Http.IFormFile? File { get; set; }
+}
+
 public sealed class UpdateDocumentRequest
 {
     public string? DocumentName { get; set; }
