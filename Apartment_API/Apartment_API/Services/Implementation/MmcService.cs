@@ -8,6 +8,7 @@ namespace Apartment_API.Services.Implementation;
 
 public sealed class MmcService(AppDbContext db) : IMmcService
 {
+    private const string BatchDraft = "DRAFT";
     private const string BatchPending = "PENDING";
     private const string BatchApproved = "APPROVED";
     private const string BatchRejected = "REJECTED";
@@ -445,7 +446,8 @@ public sealed class MmcService(AppDbContext db) : IMmcService
         int apartmentId, int mmcPeriodId, CancellationToken cancellationToken)
     {
         var batchId = await db.MmcBatches.AsNoTracking()
-            .Where(x => x.ApartmentId == apartmentId && x.MmcPeriodId == mmcPeriodId && x.StatusCode == BatchPending && x.IsActive)
+            .Where(x => x.ApartmentId == apartmentId && x.MmcPeriodId == mmcPeriodId && x.IsActive
+                && (x.StatusCode == BatchDraft || x.StatusCode == BatchPending))
             .OrderByDescending(x => x.SubmittedAt).Select(x => (int?)x.IdMmcBatch)
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (batchId is null) return [];

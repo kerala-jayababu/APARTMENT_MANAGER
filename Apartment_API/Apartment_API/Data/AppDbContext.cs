@@ -70,4 +70,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UnitStatusHistory> UnitStatusHistory => Set<UnitStatusHistory>();
     public DbSet<OwnershipHistory> OwnershipHistory => Set<OwnershipHistory>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
+
+    public DbSet<HelpDeskCategory> HelpDeskCategories => Set<HelpDeskCategory>();
+    public DbSet<HelpDesk> HelpDesks => Set<HelpDesk>();
+    public DbSet<HelpdeskStatusDetail> HelpdeskStatusDetails => Set<HelpdeskStatusDetail>();
 }

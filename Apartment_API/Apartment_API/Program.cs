@@ -81,6 +81,7 @@ builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IMmcService, MmcService>();
+builder.Services.AddScoped<IHelpdeskService, HelpdeskService>();
 builder.Services.AddScoped<IIncomeHeadService, IncomeHeadService>();
 builder.Services.AddScoped<IVendorService, VendorService>();
 builder.Services.AddScoped<IBlockService, BlockService>();

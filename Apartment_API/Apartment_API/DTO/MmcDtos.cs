@@ -65,11 +65,6 @@ public sealed class MmcBatchCreatedDto
     public int LineCount { get; init; }
 }
 
-public sealed class RejectRequest
-{
-    public string Reason { get; set; } = string.Empty;
-}
-
 public sealed class MmcBatchListDto
 {
     public int Id { get; init; }

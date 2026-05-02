@@ -112,44 +112,66 @@ public sealed class MmcController(
 
     [HttpPost("batches/{id:int}/approve")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Approve(
         [FromRoute] int id,
         CancellationToken cancellationToken = default)
     {
-        if (currentUser.IdUser is not { } userId) return Unauthorized();
-        if (currentUser.IdApartment is not { } apartmentId) return StatusCode(StatusCodes.Status403Forbidden);
+        if (currentUser.IdUser is not { } userId)
+            return Unauthorized(new ApiResponseDto<object?> { Success = false, Message = "User id is not available in the token." });
+        if (currentUser.IdApartment is not { } apartmentId)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new ApiResponseDto<object?> { Success = false, Message = "Apartment context is required.", Errors = ["NO_APARTMENT_CONTEXT"] });
         try
         {
             await service.ApproveBatchAsync(apartmentId, userId, id, cancellationToken);
             return NoContent();
         }
-        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponseDto<object?> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Approve MMC batch {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ApiResponseDto<object?> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
         }
     }
 
     [HttpPost("batches/{id:int}/reject")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Reject(
         [FromRoute] int id,
         [FromBody] RejectRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (currentUser.IdUser is not { } userId) return Unauthorized();
-        if (currentUser.IdApartment is not { } apartmentId) return StatusCode(StatusCodes.Status403Forbidden);
+        if (currentUser.IdUser is not { } userId)
+            return Unauthorized(new ApiResponseDto<object?> { Success = false, Message = "User id is not available in the token." });
+        if (currentUser.IdApartment is not { } apartmentId)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new ApiResponseDto<object?> { Success = false, Message = "Apartment context is required.", Errors = ["NO_APARTMENT_CONTEXT"] });
         try
         {
             await service.RejectBatchAsync(apartmentId, userId, id, request, cancellationToken);
             return NoContent();
         }
-        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponseDto<object?> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Reject MMC batch {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ApiResponseDto<object?> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
         }
     }
 
