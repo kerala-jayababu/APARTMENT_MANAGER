@@ -4,6 +4,7 @@ using Asp.Versioning.ApiExplorer;
 using Apartment_API.Configuration;
 using Apartment_API.Data;
 using Apartment_API.Helpers;
+using Apartment_API.Middleware;
 using Apartment_API.Services.Implementation;
 using Apartment_API.Services.Implementation.Committee;
 using Apartment_API.Services.Interfaces;
@@ -82,6 +83,8 @@ builder.Services.AddScoped<IExpenseHeadService, ExpenseHeadService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IMmcService, MmcService>();
 builder.Services.AddScoped<IHelpdeskService, HelpdeskService>();
+builder.Services.AddScoped<IApprovalsInboxService, ApprovalsInboxService>();
+builder.Services.AddScoped<IBudgetRevisionService, BudgetRevisionService>();
 builder.Services.AddScoped<IIncomeHeadService, IncomeHeadService>();
 builder.Services.AddScoped<IVendorService, VendorService>();
 builder.Services.AddScoped<IBlockService, BlockService>();
@@ -110,6 +113,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
 
 var app = builder.Build();
+
+app.UseGlobalApiExceptionHandler();
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>

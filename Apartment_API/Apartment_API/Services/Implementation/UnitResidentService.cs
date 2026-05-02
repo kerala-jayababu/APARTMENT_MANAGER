@@ -145,7 +145,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             OwnershipType = ot?.OwnershipName,
             PrimaryOwner = primary,
             CurrentMmc = mmc,
-            OpeningReceivable = 0,
+            OpeningReceivable = u.OpeningReceivable,
             OpeningAdvance = 0,
             IsActive = u.IsActive
         };
@@ -195,6 +195,8 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             OwnershipTypeId = request.OwnershipTypeId,
             IdCurrentOwner = request.PrimaryOwnerPersonId,
             CurrentMmcAmount = 0,
+            OpeningReceivable = request.OpeningReceivable,
+            OpeningReceivableAsOn = null,
             IsActive = true,
             CreatedAt = now,
             CreatedBy = userId
@@ -280,6 +282,8 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
                     UnitStatusId = request.InitialUnitStatusId,
                     OwnershipTypeId = defaultOwnership,
                     CurrentMmcAmount = 0,
+                    OpeningReceivable = 0,
+                    OpeningReceivableAsOn = null,
                     IsActive = true,
                     CreatedAt = now,
                     CreatedBy = userId

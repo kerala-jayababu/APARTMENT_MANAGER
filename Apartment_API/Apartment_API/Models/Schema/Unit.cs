@@ -13,11 +13,13 @@ public sealed class Unit
 
     public int ApartmentId { get; set; }
 
+    /// <summary>FK → Blocks.IdBlock (nullable until backfilled from legacy <see cref="Block" /> text).</summary>
     public int? BlockId { get; set; }
 
     [Required, MaxLength(20)]
     public string UnitNumber { get; set; } = string.Empty;
 
+    /// <summary>Legacy display/code string; prefer <see cref="BlockId"/> when set.</summary>
     [MaxLength(20)]
     public string? Block { get; set; }
 
@@ -37,8 +39,19 @@ public sealed class Unit
     public int OwnershipTypeId { get; set; }
     public int? IdCurrentOwner { get; set; }
 
+    /// <summary>SQL column is <c>CurrentMMCAmount</c>.</summary>
+    [Column("CurrentMMCAmount")]
     [Precision(12, 2)]
     public decimal CurrentMmcAmount { get; set; }
+
+    [Column("ControlLedgerAccountID")]
+    public int? ControlLedgerAccountId { get; set; }
+
+    [Precision(18, 2)]
+    public decimal OpeningReceivable { get; set; }
+
+    [Column(TypeName = "date")]
+    public DateTime? OpeningReceivableAsOn { get; set; }
 
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }

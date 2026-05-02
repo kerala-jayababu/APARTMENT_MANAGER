@@ -22,7 +22,8 @@ public abstract class ResidentServiceBase(AppDbContext db, IWebHostEnvironment e
         if (id == 0)
             id = await Db.PersonTypes.AsNoTracking()
                 .Where(p => p.IsActive)
-                .Where(p => p.PersonTypeName.Contains(code, StringComparison.OrdinalIgnoreCase))
+                // EF cannot translate Contains(..., StringComparison); use upper-case match instead.
+                .Where(p => p.PersonTypeName.ToUpper().Contains(c))
                 .Select(p => p.IdPersonType)
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);

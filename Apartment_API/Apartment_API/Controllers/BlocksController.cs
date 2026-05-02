@@ -13,11 +13,11 @@ namespace Apartment_API.Controllers;
 [Route("api/v{version:apiVersion}/blocks")]
 public sealed class BlocksController(
     IBlockService service,
-    ICurrentUser currentUser,
-    ILogger<BlocksController> logger) : ControllerBase
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<BlockListDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<BlockListDto>>), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ApiResponseDto<IReadOnlyList<BlockListDto>>>> GetList(
         [FromQuery] string? search,
         [FromQuery] bool? isActive,
@@ -25,48 +25,34 @@ public sealed class BlocksController(
     {
         if (currentUser.IdApartment is not { } apartmentId)
             return ForbiddenNoApartment<IReadOnlyList<BlockListDto>>();
-        try
+        var data = await service.ListAsync(apartmentId, search, isActive, cancellationToken);
+        return Ok(new ApiResponseDto<IReadOnlyList<BlockListDto>>
         {
-            var data = await service.ListAsync(apartmentId, search, isActive, cancellationToken);
-            return Ok(new ApiResponseDto<IReadOnlyList<BlockListDto>>
-            {
-                Success = true,
-                Message = "Blocks loaded.",
-                Data = data
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GetList blocks.");
-            return ServerError<IReadOnlyList<BlockListDto>>();
-        }
+            Success = true,
+            Message = "Blocks loaded.",
+            Data = data
+        });
     }
 
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(ApiResponseDto<BlockListDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponseDto<BlockListDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponseDto<BlockListDto>), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ApiResponseDto<BlockListDto>>> GetById(
         [FromRoute] int id,
         CancellationToken cancellationToken)
     {
         if (currentUser.IdApartment is not { } apartmentId)
             return ForbiddenNoApartment<BlockListDto>();
-        try
-        {
-            var data = await service.GetByIdAsync(apartmentId, id, cancellationToken);
-            if (data is null)
-                return NotFound(new ApiResponseDto<BlockListDto> { Success = false, Message = "Block not found." });
-            return Ok(new ApiResponseDto<BlockListDto> { Success = true, Message = "Block loaded.", Data = data });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GetById block {Id}.", id);
-            return ServerError<BlockListDto>();
-        }
+        var data = await service.GetByIdAsync(apartmentId, id, cancellationToken);
+        if (data is null)
+            return NotFound(new ApiResponseDto<BlockListDto> { Success = false, Message = "Block not found." });
+        return Ok(new ApiResponseDto<BlockListDto> { Success = true, Message = "Block loaded.", Data = data });
     }
 
     [HttpPost]
     [ProducesResponseType(typeof(ApiResponseDto<IdResultDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponseDto<IdResultDto>), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ApiResponseDto<IdResultDto>>> Create(
         [FromBody] CreateBlockRequest request,
         CancellationToken cancellationToken)
@@ -90,15 +76,11 @@ public sealed class BlocksController(
         {
             return BadRequest(new ApiResponseDto<IdResultDto> { Success = false, Message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Create block.");
-            return ServerError<IdResultDto>();
-        }
     }
 
     [HttpPut("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] CreateBlockRequest request,
@@ -117,16 +99,12 @@ public sealed class BlocksController(
         {
             return BadRequest(ex.Message);
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Update block {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
     }
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken cancellationToken)
     {
         if (currentUser.IdApartment is not { } apartmentId)
@@ -142,11 +120,6 @@ public sealed class BlocksController(
                 return Conflict(ex.Message);
             return BadRequest(ex.Message);
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Delete block {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
-        }
     }
 
     private ActionResult<ApiResponseDto<T>> ForbiddenNoApartment<T>() =>
@@ -156,14 +129,5 @@ public sealed class BlocksController(
                 Success = false,
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
-            });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T>
-            {
-                Success = false,
-                Message = "An unexpected error occurred.",
-                Errors = ["INTERNAL_SERVER_ERROR"]
             });
 }

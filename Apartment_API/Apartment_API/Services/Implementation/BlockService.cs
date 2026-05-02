@@ -20,13 +20,18 @@ public sealed class BlockService(AppDbContext db) : IBlockService
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim();
-            q = q.Where(b => b.BlockCode.Contains(s) || b.BlockName.Contains(s));
+            q = q.Where(b =>
+                (b.BlockCode != null && b.BlockCode.Contains(s)) ||
+                (b.BlockName != null && b.BlockName.Contains(s)));
         }
         var list = await q.OrderBy(b => b.BlockName).ThenBy(b => b.IdBlock).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (list.Count == 0) return [];
 
+        // Avoid ToUpper() on possibly-null DB strings; vacant list may be empty if master has no VACANT row.
         var vacantIdList = await db.UnitStatuses.AsNoTracking()
-            .Where(us => us.StatusCode.ToUpper() == "VACANT" || us.StatusName.ToUpper().Contains("VACANT"))
+            .Where(us =>
+                (us.StatusCode != null && us.StatusCode.ToUpper() == "VACANT") ||
+                (us.StatusName != null && us.StatusName.ToUpper().Contains("VACANT")))
             .Select(us => us.IdUnitStatus)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
