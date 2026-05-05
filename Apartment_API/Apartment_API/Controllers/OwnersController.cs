@@ -13,8 +13,7 @@ namespace Apartment_API.Controllers;
 [Route("api/v{version:apiVersion}/owners")]
 public sealed class OwnersController(
     IOwnerResidentService service,
-    ICurrentUser currentUser,
-    ILogger<OwnersController> logger) : ControllerBase
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<OwnerListDto>>), StatusCodes.Status200OK)]
@@ -27,16 +26,8 @@ public sealed class OwnersController(
     {
         if (currentUser.IdApartment is not { } apartmentId)
             return ForbiddenNoApartment<PagedResult<OwnerListDto>>();
-        try
-        {
-            var data = await service.ListAsync(apartmentId, search, isActive, page, pageSize, cancellationToken);
-            return Ok(new ApiResponseDto<PagedResult<OwnerListDto>> { Success = true, Message = "Owners loaded.", Data = data });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GetList owners.");
-            return ServerError<PagedResult<OwnerListDto>>();
-        }
+        var data = await service.ListAsync(apartmentId, search, isActive, page, pageSize, cancellationToken);
+        return Ok(new ApiResponseDto<PagedResult<OwnerListDto>> { Success = true, Message = "Owners loaded.", Data = data });
     }
 
     [HttpGet("{personId:int}")]
@@ -48,18 +39,10 @@ public sealed class OwnersController(
     {
         if (currentUser.IdApartment is not { } apartmentId)
             return ForbiddenNoApartment<OwnerDetailDto>();
-        try
-        {
-            var data = await service.GetAsync(apartmentId, personId, cancellationToken);
-            if (data is null)
-                return NotFound(new ApiResponseDto<OwnerDetailDto> { Success = false, Message = "Owner not found." });
-            return Ok(new ApiResponseDto<OwnerDetailDto> { Success = true, Message = "Owner loaded.", Data = data });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GetById owner {PersonId}.", personId);
-            return ServerError<OwnerDetailDto>();
-        }
+        var data = await service.GetAsync(apartmentId, personId, cancellationToken);
+        if (data is null)
+            return NotFound(new ApiResponseDto<OwnerDetailDto> { Success = false, Message = "Owner not found." });
+        return Ok(new ApiResponseDto<OwnerDetailDto> { Success = true, Message = "Owner loaded.", Data = data });
     }
 
     [HttpPost]
@@ -82,11 +65,6 @@ public sealed class OwnersController(
         {
             return BadRequest(new ApiResponseDto<IdResultDto> { Success = false, Message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Create owner.");
-            return ServerError<IdResultDto>();
-        }
     }
 
     [HttpPut("{personId:int}")]
@@ -108,11 +86,6 @@ public sealed class OwnersController(
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Update owner {PersonId}.", personId);
-            return StatusCode(StatusCodes.Status500InternalServerError);
         }
     }
 
@@ -142,11 +115,6 @@ public sealed class OwnersController(
         {
             return BadRequest(new ApiResponseDto<IdProofResultDto> { Success = false, Message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "UploadIdProof {PersonId}.", personId);
-            return ServerError<IdProofResultDto>();
-        }
     }
 
     private ActionResult<ApiResponseDto<T>> ForbiddenNoApartment<T>() =>
@@ -158,7 +126,4 @@ public sealed class OwnersController(
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

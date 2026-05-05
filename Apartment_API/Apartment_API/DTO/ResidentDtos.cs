@@ -80,6 +80,10 @@ public sealed class CreateOwnerRequest
     public List<int> LinkedUnitIds { get; set; } = [];
     public DateTime OwnershipFromDate { get; set; }
     public List<VehicleRequestItem> Vehicles { get; set; } = [];
+    /// <summary>When true (default), creates Users + ApartmentUsers and sets Persons.LinkedUserId. Requires Email.</summary>
+    public bool CreateAppLogin { get; set; } = true;
+    /// <summary>Apartment app role when <see cref="CreateAppLogin"/> is true (e.g. RESIDENT, ADMIN).</summary>
+    public string? ApartmentAccessRoleCode { get; set; }
 }
 
 // --- Co-owners ---
@@ -107,6 +111,9 @@ public sealed class CreateCoOwnerRequest
     public decimal OwnershipSharePct { get; set; }
     public int? IdentityDocTypeId { get; set; }
     public string? IdentityDocNumber { get; set; }
+    public DateTime? OwnershipFromDate { get; set; }
+    public bool CreateAppLogin { get; set; }
+    public string? ApartmentAccessRoleCode { get; set; }
 }
 
 public sealed class CoOwnerCreatedDto
@@ -147,6 +154,9 @@ public sealed class CreateTenantRequest
     public decimal? MonthlyRent { get; set; }
     public decimal? SecurityDeposit { get; set; }
     public List<VehicleRequestItem> Vehicles { get; set; } = [];
+    /// <summary>When true, creates Users + ApartmentUsers and links Persons.LinkedUserId. Requires Email.</summary>
+    public bool CreateAppLogin { get; set; }
+    public string? ApartmentAccessRoleCode { get; set; }
 }
 
 public sealed class TenantCreatedDto
@@ -193,6 +203,7 @@ public sealed class RecordOwnershipTransferRequest
     public int UnitId { get; set; }
     public string TransferType { get; set; } = "Sale";
     public DateTime TransferDate { get; set; }
+    public DateTime? EffectiveDate { get; set; }
     public string? SaleDeedReference { get; set; }
     public int NewOwnerPersonId { get; set; }
     public decimal? TransferValue { get; set; }
@@ -201,13 +212,13 @@ public sealed class RecordOwnershipTransferRequest
 
 public sealed class OwnershipTransferCreatedDto
 {
-    public int Id { get; init; }
+    public long Id { get; init; }
     public int NewPrimaryUnitOwnerId { get; init; }
 }
 
 public sealed class OwnershipHistoryItemDto
 {
-    public int Id { get; init; }
+    public long Id { get; init; }
     public int UnitId { get; init; }
     public int? PreviousOwnerPersonId { get; init; }
     public string? PreviousOwnerName { get; init; }

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Apartment_API.Data;
 using Apartment_API.DTO;
 using Apartment_API.Helpers;
@@ -133,10 +133,10 @@ public sealed class OwnerResidentService(
         };
     }
 
-    private const string OwnerRoleCode = "OWNER";
+    private const string DefaultOwnerApartmentRoleCode = "RESIDENT";
 
     // ────────────────────────────────────────────────────────────────────
-    //  CREATE
+    //  CREATE — Persons + UnitOwners (+ Users / ApartmentUsers only if CreateAppLogin)
     // ────────────────────────────────────────────────────────────────────
     public async Task<int> CreateAsync(
         int apartmentId,
@@ -148,18 +148,21 @@ public sealed class OwnerResidentService(
         if (request.LinkedUnitIds is null || request.LinkedUnitIds.Count == 0)
             throw new InvalidOperationException("linkedUnitIds is required.");
 
-        // De-duplicate the unit-id list so we never insert two UnitOwner
-        // rows for the same unit.
         var unitIds = request.LinkedUnitIds.Distinct().ToList();
 
         var phone = request.PhoneNumber.Trim();
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email!.Trim();
 
-        if (string.IsNullOrWhiteSpace(email))
-            throw new InvalidOperationException("Email is required so the owner can log into the mobile app.");
+        if (request.CreateAppLogin && string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Email is required when createAppLogin is true.");
 
         var ownerType = await RequirePersonTypeIdAsync(PersonTypeCodes.Owner, cancellationToken);
-        var ownerRoleId = await RequireRoleIdAsync(OwnerRoleCode, cancellationToken);
+        var apartmentRoleCode = string.IsNullOrWhiteSpace(request.ApartmentAccessRoleCode)
+            ? DefaultOwnerApartmentRoleCode
+            : request.ApartmentAccessRoleCode.Trim();
+        var apartmentRoleId = request.CreateAppLogin
+            ? await RequireRoleIdAsync(apartmentRoleCode, cancellationToken)
+            : 0;
 
         // 2. Cross-row validation ────────────────────────────────────────
         var phoneTaken = await Db.Persons.AnyAsync(
@@ -184,38 +187,13 @@ public sealed class OwnerResidentService(
         await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
 
-        // 3a. Create the User row first — needed for Person.LinkedUserId
-        var user = new User
-        {
-            FullName = request.FullName.Trim(),
-            Email = email,
-            PhoneNumber = phone,
-            PasswordHash = GenerateOtpOnlyPasswordHash(), // forced password reset on first OTP login
-            IsSuperAdmin = false,
-            IsActive = true,
-            CreatedAt = now,
-            CreatedBy = userId
-        };
-        Db.Users.Add(user);
-        await Db.SaveChangesAsync(cancellationToken);
-
-        // 3b. Tenant-scope mapping → ApartmentUsers
-        Db.ApartmentUsers.Add(new ApartmentUser
-        {
-            ApartmentId = apartmentId,
-            UserId = user.IdUser,
-            RoleId = ownerRoleId,
-            IsActive = true,
-            CreatedAt = now,
-            CreatedBy = userId
-        });
-
-        // 3c. Person row (with LinkedUserId)
+        // Server-only: apartment from JWT; type = OWNER from PersonTypes; login user linked when CreateAppLogin.
         var person = new Person
         {
             ApartmentId = apartmentId,
-            PersonNumber = "TEMP",                  // overwritten after we know IdPerson
             PersonTypeId = ownerType,
+            LinkedUserId = null,
+            PersonNumber = "TEMP",
             FullName = request.FullName.Trim(),
             Email = email,
             PhoneNumber = phone,
@@ -225,7 +203,6 @@ public sealed class OwnerResidentService(
             PermanentAddress = request.PermanentAddress,
             EmergencyContactName = request.EmergencyContactName,
             EmergencyContactPhone = request.EmergencyContactPhone,
-            LinkedUserId = user.IdUser,             // ← NEW: wires the resident profile to the login user
             IsActive = true,
             CreatedAt = now,
             CreatedBy = userId
@@ -235,7 +212,35 @@ public sealed class OwnerResidentService(
 
         person.PersonNumber = $"P-{person.IdPerson:D4}";
 
-        // 3d. UnitOwners — first deduped unit becomes primary
+        if (request.CreateAppLogin)
+        {
+            var user = new User
+            {
+                FullName = request.FullName.Trim(),
+                Email = email!,
+                PhoneNumber = phone,
+                PasswordHash = GenerateOtpOnlyPasswordHash(),
+                IsSuperAdmin = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            };
+            Db.Users.Add(user);
+            await Db.SaveChangesAsync(cancellationToken);
+
+            Db.ApartmentUsers.Add(new ApartmentUser
+            {
+                ApartmentId = apartmentId,
+                UserId = user.IdUser,
+                RoleId = apartmentRoleId,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            });
+            person.LinkedUserId = user.IdUser;
+        }
+
+        var ownFrom = request.OwnershipFromDate.Date;
         var isFirst = true;
         foreach (var uid in unitIds)
         {
@@ -245,7 +250,7 @@ public sealed class OwnerResidentService(
                 UnitId = uid,
                 PersonId = person.IdPerson,
                 IsPrimaryOwner = isFirst,
-                OwnershipFromDate = request.OwnershipFromDate,   // assumes DateOnly DTO
+                OwnershipFromDate = ownFrom,
                 IsActive = true,
                 CreatedAt = now,
                 CreatedBy = userId
@@ -253,7 +258,6 @@ public sealed class OwnerResidentService(
             isFirst = false;
         }
 
-        // 3e. Vehicles — null-safe, skip blank numbers
         if (request.Vehicles is { Count: > 0 } vehicles)
         {
             foreach (var v in vehicles)
@@ -439,27 +443,6 @@ public sealed class OwnerResidentService(
         Db.StoredDocuments.Add(doc);
         await Db.SaveChangesAsync(cancellationToken);
         return new IdProofResultDto { DocumentId = doc.IdDocument, FileUrl = url };
-    }
-
-    private async Task<int> RequireRoleIdAsync(string roleCode, CancellationToken cancellationToken = default)
-    {
-        var code = roleCode.Trim();
-        var id = await Db.AppRoles.AsNoTracking()
-            .Where(r => r.IsActive && r.RoleCode == code)
-            .Select(r => r.IdRole)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (id == 0)
-        {
-            var roles = await Db.AppRoles.AsNoTracking()
-                .Where(r => r.IsActive)
-                .ToListAsync(cancellationToken);
-            var match = roles.FirstOrDefault(r =>
-                string.Equals(r.RoleCode, code, StringComparison.OrdinalIgnoreCase));
-            if (match is not null) id = match.IdRole;
-        }
-        if (id == 0)
-            throw new InvalidOperationException($"App role not found: {code}.");
-        return id;
     }
 
     private string GenerateOtpOnlyPasswordHash() =>

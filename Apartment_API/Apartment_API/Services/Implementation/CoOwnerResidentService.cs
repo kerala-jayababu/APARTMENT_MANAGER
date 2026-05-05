@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Apartment_API.Data;
 using Apartment_API.DTO;
 using Apartment_API.Helpers;
@@ -11,8 +12,11 @@ namespace Apartment_API.Services.Implementation;
 public sealed class CoOwnerResidentService(
     AppDbContext db,
     IWebHostEnvironment env,
+    IPasswordHasher passwordHasher,
     IOwnerResidentService owners) : ResidentServiceBase(db, env), ICoOwnerResidentService
 {
+    private readonly IPasswordHasher _passwordHasher = passwordHasher;
+    private const string DefaultCoOwnerApartmentRoleCode = "RESIDENT";
     public async Task<PagedResult<CoOwnerListDto>> ListAsync(
         int apartmentId, int? primaryOwnerPersonId, int? unitId, bool? isActive, int page, int pageSize, CancellationToken cancellationToken = default)
     {
@@ -62,11 +66,26 @@ public sealed class CoOwnerResidentService(
     public async Task<CoOwnerCreatedDto> CreateAsync(
         int apartmentId, int userId, CreateCoOwnerRequest request, CancellationToken cancellationToken = default)
     {
+        var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        if (request.CreateAppLogin && string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Email is required when createAppLogin is true.");
+
         var coType = await RequirePersonTypeIdAsync(PersonTypeCodes.CoOwner, cancellationToken);
         var coCount = await Db.Persons.CountAsync(
             p => p.ApartmentId == apartmentId && p.ParentOwnerId == request.PrimaryOwnerPersonId, cancellationToken);
         if (coCount >= 3) throw new InvalidOperationException("Maximum 3 co-owners per primary owner context.");
+        var apartmentRoleCode = string.IsNullOrWhiteSpace(request.ApartmentAccessRoleCode)
+            ? DefaultCoOwnerApartmentRoleCode
+            : request.ApartmentAccessRoleCode.Trim();
+        var apartmentRoleId = request.CreateAppLogin
+            ? await RequireRoleIdAsync(apartmentRoleCode, cancellationToken)
+            : 0;
+
+        await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
+        var fromDate = (request.OwnershipFromDate ?? now).Date;
+        var phone = request.PhoneNumber.Trim();
+
         var person = new Person
         {
             ApartmentId = apartmentId,
@@ -74,10 +93,11 @@ public sealed class CoOwnerResidentService(
             PersonTypeId = coType,
             ParentOwnerId = request.PrimaryOwnerPersonId,
             FullName = request.FullName.Trim(),
-            Email = request.Email,
-            PhoneNumber = request.PhoneNumber.Trim(),
+            Email = email,
+            PhoneNumber = phone,
             IdentityDocTypeId = request.IdentityDocTypeId,
             IdentityDocNumber = request.IdentityDocNumber,
+            LinkedUserId = null,
             IsActive = true,
             CreatedAt = now,
             CreatedBy = userId
@@ -85,13 +105,42 @@ public sealed class CoOwnerResidentService(
         Db.Persons.Add(person);
         await Db.SaveChangesAsync(cancellationToken);
         person.PersonNumber = $"P-{person.IdPerson:D4}";
+
+        if (request.CreateAppLogin)
+        {
+            var user = new User
+            {
+                FullName = request.FullName.Trim(),
+                Email = email!,
+                PhoneNumber = phone,
+                PasswordHash = _passwordHasher.Hash(Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))),
+                IsSuperAdmin = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            };
+            Db.Users.Add(user);
+            await Db.SaveChangesAsync(cancellationToken);
+            Db.ApartmentUsers.Add(new ApartmentUser
+            {
+                ApartmentId = apartmentId,
+                UserId = user.IdUser,
+                RoleId = apartmentRoleId,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            });
+            person.LinkedUserId = user.IdUser;
+            await Db.SaveChangesAsync(cancellationToken);
+        }
+
         var uo = new UnitOwner
         {
             ApartmentId = apartmentId,
             UnitId = request.UnitId,
             PersonId = person.IdPerson,
             IsPrimaryOwner = false,
-            OwnershipFromDate = now.Date,
+            OwnershipFromDate = fromDate,
             IsActive = true,
             OwnershipSharePct = request.OwnershipSharePct,
             CreatedAt = now,
@@ -99,6 +148,7 @@ public sealed class CoOwnerResidentService(
         };
         Db.UnitOwners.Add(uo);
         await Db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
         return new CoOwnerCreatedDto { Id = uo.IdUnitOwner, PersonId = person.IdPerson };
     }
 

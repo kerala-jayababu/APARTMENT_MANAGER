@@ -13,8 +13,7 @@ namespace Apartment_API.Controllers;
 [Route("api/v{version:apiVersion}/ownership-transfers")]
 public sealed class OwnershipTransfersController(
     IOwnershipTransferResidentService service,
-    ICurrentUser currentUser,
-    ILogger<OwnershipTransfersController> logger) : ControllerBase
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType(typeof(ApiResponseDto<OwnershipTransferCreatedDto>), StatusCodes.Status201Created)]
@@ -36,18 +35,13 @@ public sealed class OwnershipTransfersController(
         {
             return BadRequest(new ApiResponseDto<OwnershipTransferCreatedDto> { Success = false, Message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Record ownership transfer.");
-            return ServerError<OwnershipTransferCreatedDto>();
-        }
     }
 
-    [HttpPost("{id:int}/deed")]
+    [HttpPost("{id:long}/deed")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponseDto<IdProofResultDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponseDto<IdProofResultDto>>> UploadDeed(
-        [FromRoute] int id,
+        [FromRoute] long id,
         IFormFile? file,
         CancellationToken cancellationToken = default)
     {
@@ -67,11 +61,6 @@ public sealed class OwnershipTransfersController(
         {
             return BadRequest(new ApiResponseDto<IdProofResultDto> { Success = false, Message = ex.Message });
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "UploadDeed {Id}.", id);
-            return ServerError<IdProofResultDto>();
-        }
     }
 
     private ActionResult<ApiResponseDto<T>> ForbiddenNoApartment<T>() =>
@@ -83,7 +72,4 @@ public sealed class OwnershipTransfersController(
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

@@ -51,6 +51,15 @@ public sealed class UnitDetailDto
     public bool IsActive { get; init; }
 }
 
+/// <summary>Link existing Persons rows (OWNER / CO-OWNER) to a new unit — no Persons insert here.</summary>
+public sealed class AssignExistingUnitOwnerItem
+{
+    public int PersonId { get; set; }
+    public bool IsPrimaryOwner { get; set; }
+    public DateTime OwnershipFromDate { get; set; }
+    public decimal? OwnershipSharePct { get; set; }
+}
+
 public sealed class CreateUnitRequest
 {
     public string UnitNumber { get; set; } = string.Empty;
@@ -62,7 +71,12 @@ public sealed class CreateUnitRequest
     public string? Facing { get; set; }
     public int UnitStatusId { get; set; }
     public int OwnershipTypeId { get; set; }
+    /// <summary>Legacy single primary; use <see cref="OwnerAssignments"/> for primary + co-owners together.</summary>
     public int? PrimaryOwnerPersonId { get; set; }
+    /// <summary>Used with <see cref="PrimaryOwnerPersonId"/> only when <see cref="OwnerAssignments"/> is null/empty.</summary>
+    public DateTime? PrimaryOwnershipFromDate { get; set; }
+    /// <summary>Variant B: one row per existing owner/co-owner picked from Persons.</summary>
+    public List<AssignExistingUnitOwnerItem>? OwnerAssignments { get; set; }
     public decimal OpeningReceivable { get; set; }
     public decimal OpeningAdvance { get; set; }
 }

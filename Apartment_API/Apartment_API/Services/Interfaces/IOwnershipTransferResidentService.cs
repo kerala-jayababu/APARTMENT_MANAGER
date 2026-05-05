@@ -9,5 +9,5 @@ public interface IOwnershipTransferResidentService
     Task<IReadOnlyList<OwnershipHistoryItemDto>> GetHistoryForUnitAsync(
         int apartmentId, int unitId, CancellationToken cancellationToken = default);
     Task<IdProofResultDto> UploadDeedAsync(
-        int apartmentId, int userId, int idOwnershipHistory, Stream fileStream, string fileName, CancellationToken cancellationToken = default);
+        int apartmentId, int userId, long idOwnershipHistory, Stream fileStream, string fileName, CancellationToken cancellationToken = default);
 }

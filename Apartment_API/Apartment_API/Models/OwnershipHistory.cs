@@ -9,11 +9,14 @@ public sealed class OwnershipHistory
 {
     [Key, Column("IdOwnershipHistory")]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public int IdOwnershipHistory { get; set; }
+    public long IdOwnershipHistory { get; set; }
 
     public int ApartmentId { get; set; }
     public int UnitId { get; set; }
+    [Column("PreviousPrimaryPersonId")]
     public int? PreviousOwnerPersonId { get; set; }
+
+    [Column("NewPrimaryPersonId")]
     public int NewOwnerPersonId { get; set; }
 
     [MaxLength(20)]
@@ -22,6 +25,10 @@ public sealed class OwnershipHistory
     [Column(TypeName = "date")]
     public DateTime TransferDate { get; set; }
 
+    [Column(TypeName = "date")]
+    public DateTime EffectiveDate { get; set; }
+
+    [Column("DeedReference")]
     [MaxLength(100)]
     public string? SaleDeedReference { get; set; }
 
@@ -33,6 +40,9 @@ public sealed class OwnershipHistory
     [MaxLength(500)]
     public string? Remarks { get; set; }
 
+    [Column("CreatedByUserId")]
     public int RecordedByUserId { get; set; }
+
+    [Column("CreatedAt")]
     public DateTime RecordedAt { get; set; }
 }

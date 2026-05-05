@@ -31,6 +31,29 @@ public abstract class ResidentServiceBase(AppDbContext db, IWebHostEnvironment e
         return id;
     }
 
+    protected async Task<int> RequireRoleIdAsync(string roleCode, CancellationToken ct = default)
+    {
+        var code = roleCode.Trim();
+        var id = await Db.AppRoles.AsNoTracking()
+            .Where(r => r.IsActive && r.RoleCode == code)
+            .Select(r => r.IdRole)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (id == 0)
+        {
+            var roles = await Db.AppRoles.AsNoTracking()
+                .Where(r => r.IsActive)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var match = roles.FirstOrDefault(r =>
+                string.Equals(r.RoleCode, code, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) id = match.IdRole;
+        }
+        if (id == 0)
+            throw new InvalidOperationException($"App role not found: {code}.");
+        return id;
+    }
+
     protected string UploadFile(Stream s, int apartmentId, string fileName)
     {
         var ext = Path.GetExtension(fileName);

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Apartment_API.Data;
 using Apartment_API.DTO;
 using Apartment_API.Helpers;
@@ -8,8 +9,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Apartment_API.Services.Implementation;
 
-public sealed class TenantResidentService(AppDbContext db, IWebHostEnvironment env) : ResidentServiceBase(db, env), ITenantResidentService
+public sealed class TenantResidentService(
+    AppDbContext db,
+    IWebHostEnvironment env,
+    IPasswordHasher passwordHasher) : ResidentServiceBase(db, env), ITenantResidentService
 {
+    private readonly IPasswordHasher _passwordHasher = passwordHasher;
+    private const string DefaultTenantApartmentRoleCode = "TENANT";
     public async Task<PagedResult<TenantListDto>> ListAsync(
         int apartmentId, string? search, int? unitId, bool? isActive, int? expiringWithinDays, int page, int pageSize,
         CancellationToken cancellationToken = default)
@@ -116,11 +122,23 @@ public sealed class TenantResidentService(AppDbContext db, IWebHostEnvironment e
         int apartmentId, int userId, CreateTenantRequest request, CancellationToken cancellationToken = default)
     {
         if (request.LeaseEndDate is { } le && request.LeaseStartDate > le) throw new InvalidOperationException("Invalid lease range.");
+        var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        if (request.CreateAppLogin && string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Email is required when createAppLogin is true.");
+
         var active = await Db.TenantAssignments.AnyAsync(
             t => t.ApartmentId == apartmentId && t.UnitId == request.UnitId && t.IsActive && t.VacatedDate == null,
             cancellationToken);
         if (active) throw new InvalidOperationException("Unit already has an active tenant.");
         var tenantType = await RequirePersonTypeIdAsync(PersonTypeCodes.Tenant, cancellationToken);
+        var apartmentRoleCode = string.IsNullOrWhiteSpace(request.ApartmentAccessRoleCode)
+            ? DefaultTenantApartmentRoleCode
+            : request.ApartmentAccessRoleCode.Trim();
+        var apartmentRoleId = request.CreateAppLogin
+            ? await RequireRoleIdAsync(apartmentRoleCode, cancellationToken)
+            : 0;
+
+        await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var person = new Person
         {
@@ -128,10 +146,11 @@ public sealed class TenantResidentService(AppDbContext db, IWebHostEnvironment e
             PersonNumber = "TEMP",
             PersonTypeId = tenantType,
             FullName = request.FullName.Trim(),
-            Email = request.Email,
+            Email = email,
             PhoneNumber = request.PhoneNumber.Trim(),
             IdentityDocTypeId = request.IdentityDocTypeId,
             IdentityDocNumber = request.IdentityDocNumber,
+            LinkedUserId = null,
             IsActive = true,
             CreatedAt = now,
             CreatedBy = userId
@@ -139,6 +158,35 @@ public sealed class TenantResidentService(AppDbContext db, IWebHostEnvironment e
         Db.Persons.Add(person);
         await Db.SaveChangesAsync(cancellationToken);
         person.PersonNumber = $"P-{person.IdPerson:D4}";
+
+        if (request.CreateAppLogin)
+        {
+            var user = new User
+            {
+                FullName = request.FullName.Trim(),
+                Email = email!,
+                PhoneNumber = request.PhoneNumber.Trim(),
+                PasswordHash = _passwordHasher.Hash(Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))),
+                IsSuperAdmin = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            };
+            Db.Users.Add(user);
+            await Db.SaveChangesAsync(cancellationToken);
+            Db.ApartmentUsers.Add(new ApartmentUser
+            {
+                ApartmentId = apartmentId,
+                UserId = user.IdUser,
+                RoleId = apartmentRoleId,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedBy = userId
+            });
+            person.LinkedUserId = user.IdUser;
+            await Db.SaveChangesAsync(cancellationToken);
+        }
+
         var ta = new TenantAssignment
         {
             ApartmentId = apartmentId,
@@ -168,6 +216,7 @@ public sealed class TenantResidentService(AppDbContext db, IWebHostEnvironment e
             });
         }
         await Db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
         return new TenantCreatedDto { Id = ta.IdTenantAssignment, PersonId = person.IdPerson };
     }
 

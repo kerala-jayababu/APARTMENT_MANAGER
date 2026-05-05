@@ -16,20 +16,21 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
         await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var u = await Db.Units.FirstOrDefaultAsync(x => x.IdUnit == request.UnitId && x.ApartmentId == apartmentId, cancellationToken);
         if (u is null) throw new InvalidOperationException("Unit not found.");
-        int? prev = null;
-        var oldP = await Db.UnitOwners
-            .Where(x => x.ApartmentId == apartmentId && x.UnitId == request.UnitId && x.IsPrimaryOwner && x.IsActive)
+        var oldOwners = await Db.UnitOwners
+            .Where(x => x.ApartmentId == apartmentId && x.UnitId == request.UnitId && x.IsActive)
             .ToListAsync(cancellationToken);
-        foreach (var o in oldP)
+        var prev = oldOwners.FirstOrDefault(x => x.IsPrimaryOwner)?.PersonId
+            ?? oldOwners.FirstOrDefault()?.PersonId;
+        foreach (var o in oldOwners)
         {
             o.IsActive = false;
             o.OwnershipToDate = request.TransferDate.Date;
             o.UpdatedAt = DateTime.UtcNow;
             o.UpdatedBy = userId;
-            prev = o.PersonId;
         }
         var now = DateTime.UtcNow;
         var transferValue = request.TransferValue ?? 0m;
+        var effectiveDate = (request.EffectiveDate ?? request.TransferDate).Date;
         Db.UnitOwners.Add(new UnitOwner
         {
             ApartmentId = apartmentId,
@@ -53,6 +54,7 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
             NewOwnerPersonId = request.NewOwnerPersonId,
             TransferType = request.TransferType,
             TransferDate = request.TransferDate.Date,
+            EffectiveDate = effectiveDate,
             SaleDeedReference = request.SaleDeedReference,
             TransferValue = transferValue,
             Remarks = request.Remarks,
@@ -98,7 +100,7 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
     }
 
     public async Task<IdProofResultDto> UploadDeedAsync(
-        int apartmentId, int userId, int idOwnershipHistory, Stream fileStream, string fileName, CancellationToken cancellationToken = default)
+        int apartmentId, int userId, long idOwnershipHistory, Stream fileStream, string fileName, CancellationToken cancellationToken = default)
     {
         var h = await Db.OwnershipHistory
             .FirstOrDefaultAsync(
@@ -111,6 +113,8 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
         if (catId == 0)
             catId = await Db.DocumentCategories.AsNoTracking().Select(c => c.IdDocumentCategory).FirstAsync(cancellationToken);
         var url = UploadFile(fileStream, apartmentId, fileName);
+        if (idOwnershipHistory > int.MaxValue)
+            throw new InvalidOperationException("Ownership history id exceeds supported document link range.");
         var doc = new StoredDocument
         {
             ApartmentId = apartmentId,
@@ -118,7 +122,7 @@ public sealed class OwnershipTransferResidentService(AppDbContext db, IWebHostEn
             DocumentName = Path.GetFileName(fileName),
             FileUrl = url,
             LinkedEntityType = "OwnershipHistory",
-            LinkedEntityId = idOwnershipHistory,
+            LinkedEntityId = (int)idOwnershipHistory,
             UploadedByUserId = userId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
