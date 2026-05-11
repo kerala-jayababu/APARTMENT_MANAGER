@@ -68,7 +68,7 @@ public sealed class OwnersController(
     }
 
     [HttpPut("{personId:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int personId,
         [FromBody] CreateOwnerRequest request,
@@ -81,7 +81,7 @@ public sealed class OwnersController(
         try
         {
             await service.UpdateAsync(apartmentId, userId, personId, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Owner updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {

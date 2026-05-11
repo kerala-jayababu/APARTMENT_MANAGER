@@ -115,65 +115,65 @@ public sealed class MmcController(
     }
 
     [HttpPost("batches/{id:int}/approve")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> Approve(
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<string>>> Approve(
         [FromRoute] int id,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized(new ApiResponseDto<object?> { Success = false, Message = "User id is not available in the token." });
+            return Unauthorized(new ApiResponseDto<string> { Success = false, Message = "User id is not available in the token." });
         if (currentUser.IdApartment is not { } apartmentId)
             return StatusCode(StatusCodes.Status403Forbidden,
-                new ApiResponseDto<object?> { Success = false, Message = "Apartment context is required.", Errors = ["NO_APARTMENT_CONTEXT"] });
+                new ApiResponseDto<string> { Success = false, Message = "Apartment context is required.", Errors = ["NO_APARTMENT_CONTEXT"] });
         try
         {
             await service.ApproveBatchAsync(apartmentId, userId, id, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "MMC batch approved.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ApiResponseDto<object?> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] });
+            return BadRequest(new ApiResponseDto<string> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Approve MMC batch {Id}.", id);
-            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 
     [HttpPost("batches/{id:int}/reject")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ApiResponseDto<object?>), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> Reject(
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<string>>> Reject(
         [FromRoute] int id,
         [FromBody] RejectRequest request,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized(new ApiResponseDto<object?> { Success = false, Message = "User id is not available in the token." });
+            return Unauthorized(new ApiResponseDto<string> { Success = false, Message = "User id is not available in the token." });
         if (currentUser.IdApartment is not { } apartmentId)
             return StatusCode(StatusCodes.Status403Forbidden,
-                new ApiResponseDto<object?> { Success = false, Message = "Apartment context is required.", Errors = ["NO_APARTMENT_CONTEXT"] });
+                new ApiResponseDto<string> { Success = false, Message = "Apartment context is required.", Errors = ["NO_APARTMENT_CONTEXT"] });
         try
         {
             await service.RejectBatchAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "MMC batch rejected.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ApiResponseDto<object?> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] });
+            return BadRequest(new ApiResponseDto<string> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Reject MMC batch {Id}.", id);
-            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 

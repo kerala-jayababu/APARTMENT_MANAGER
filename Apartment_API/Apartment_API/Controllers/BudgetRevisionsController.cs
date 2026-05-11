@@ -217,62 +217,62 @@ public sealed class BudgetRevisionsController(
     }
 
     [HttpDelete("lines/{idBudgetRevision:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult<ApiResponseDto<object?>>> DeleteLine(
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponseDto<string>>> DeleteLine(
         [FromRoute] int idBudgetRevision,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized(new ApiResponseDto<object?> { Success = false, Message = "User id is not available in the token." });
+            return Unauthorized(new ApiResponseDto<string> { Success = false, Message = "User id is not available in the token." });
         if (currentUser.IdApartment is not { } apartmentId)
-            return Forbidden<object?>();
+            return Forbidden<string>();
         try
         {
             await service.DeleteLineAsync(apartmentId, userId, idBudgetRevision, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Budget revision line deleted.", Data = "DELETED" });
         }
         catch (UnauthorizedAccessException)
         {
-            return ForbidResponse<object?>();
+            return ForbidResponse<string>();
         }
         catch (InvalidOperationException ex)
         {
-            return ConflictOrBadRequest<object?>(ex);
+            return ConflictOrBadRequest<string>(ex);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete budget revision line.");
-            return this.ApiServerError<object?>(environment, configuration, ex);
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 
     [HttpDelete("{batchId}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult<ApiResponseDto<object?>>> DeleteBatch(
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponseDto<string>>> DeleteBatch(
         [FromRoute] string batchId,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized(new ApiResponseDto<object?> { Success = false, Message = "User id is not available in the token." });
+            return Unauthorized(new ApiResponseDto<string> { Success = false, Message = "User id is not available in the token." });
         if (currentUser.IdApartment is not { } apartmentId)
-            return Forbidden<object?>();
+            return Forbidden<string>();
         try
         {
             await service.DeleteBatchAsync(apartmentId, userId, batchId, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Budget revision batch deleted.", Data = "DELETED" });
         }
         catch (UnauthorizedAccessException)
         {
-            return ForbidResponse<object?>();
+            return ForbidResponse<string>();
         }
         catch (InvalidOperationException ex)
         {
-            return ConflictOrBadRequest<object?>(ex);
+            return ConflictOrBadRequest<string>(ex);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete budget revision batch.");
-            return this.ApiServerError<object?>(environment, configuration, ex);
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 

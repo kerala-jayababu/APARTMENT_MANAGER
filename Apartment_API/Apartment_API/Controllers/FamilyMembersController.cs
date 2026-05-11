@@ -94,7 +94,7 @@ public sealed class FamilyMembersController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] CreateFamilyMemberRequest request,
@@ -107,7 +107,7 @@ public sealed class FamilyMembersController(
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Family member updated.", Data = "UPDATED" });
         }
         catch (Exception ex)
         {
@@ -117,7 +117,7 @@ public sealed class FamilyMembersController(
     }
 
     [HttpDelete("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken cancellationToken = default)
     {
         if (currentUser.IdApartment is not { } apartmentId)
@@ -125,7 +125,7 @@ public sealed class FamilyMembersController(
         try
         {
             await service.DeleteAsync(apartmentId, id, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Family member deleted.", Data = "DELETED" });
         }
         catch (Exception ex)
         {

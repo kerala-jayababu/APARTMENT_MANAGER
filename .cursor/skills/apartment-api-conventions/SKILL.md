@@ -16,6 +16,7 @@ Applies to `Apartment_API/Apartment_API/`. When adding or changing API code, fol
 - On success: `Success = true`, set `Message`, set `Data`.
 - On failure: `Success = false`, set `Message`, set `Errors` (e.g. error codes or short strings); omit or leave `Data` null.
 - Add `[ProducesResponseType(typeof(ApiResponseDto<...>), StatusCodes....)]` for documented status codes (200, 400, 404, 500, etc.).
+- Successful **mutations** (typical PUT / DELETE / some POST handlers) should return **`200 OK`** + **`ApiResponseDto<string>`** (`Message` + `Data` e.g. `"UPDATED"` / `"DELETED"`), **not** **`204 NoContent`**, so every JSON response wraps **`ApiResponseDto`**.
 
 ## 500 errors in controllers (mandatory — do not hand-roll generic 500 bodies)
 
@@ -28,7 +29,7 @@ From **`Apartment_API.Configuration.ControllerServerErrorExtensions`**:
 | Action return type | On unhandled `Exception` after `LogError` |
 |--------------------|-------------------------------------------|
 | `Task<ActionResult<ApiResponseDto<T>>>` (or any typed `ActionResult<ApiResponseDto<...>>`) | `return this.ApiServerError<T>(environment, configuration, ex);` |
-| `Task<IActionResult>` (e.g. `NoContent()`, `File(...)`) | `return this.ApiServerErrorAction<T>(environment, configuration, ex);` |
+| `Task<IActionResult>` (e.g. `File(...)`, redirects) | `return this.ApiServerErrorAction<T>(environment, configuration, ex);` |
 
 - **`ApiServerError<T>`** builds `ActionResult<ApiResponseDto<T>>`.
 - **`ApiServerErrorAction<T>`** builds **`IActionResult`**. Use this for actions that return **`IActionResult`** — **`ActionResult<...>` does not implicitly convert to `IActionResult`** in all cases.
@@ -127,7 +128,7 @@ public sealed class ExampleController(
 }
 ```
 
-For **`Task<IActionResult>`** actions (e.g. `Update` returning `NoContent()`), replace the catch return with:
+For **`Task<IActionResult>`** actions that do not return **`ActionResult<ApiResponseDto<T>>`** (e.g. `File(...)`), replace the catch return with:
 
 `return this.ApiServerErrorAction<object?>(environment, configuration, ex);`
 

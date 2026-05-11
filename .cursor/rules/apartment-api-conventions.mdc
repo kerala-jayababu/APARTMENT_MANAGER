@@ -11,7 +11,8 @@ When changing files under `Apartment_API/`, follow the full spec in [`.cursor/sk
 **Non-negotiables (summary):**
 
 - Controllers return **`ActionResult<ApiResponseDto<T>>`** (or agreed variants), not raw DTOs/entities.
-- Controllers use **`try` / `catch`**: on unexpected failure **`LogError`**, then **`this.ApiServerError<T>(environment, configuration, ex)`** (typed actions) or **`this.ApiServerErrorAction<T>(...)`** (**`IActionResult`** actions, e.g. `NoContent` / file). Do **not** hand-roll `"An unexpected error occurred."` — use **`Configuration/ControllerServerErrorExtensions`** + **`ApiErrorResponseHelper`** behaviour.
+- Successful JSON mutations use **`200 OK`** + **`ApiResponseDto<string>`**, not **`204 NoContent`**.
+- Controllers use **`try` / `catch`**: on unexpected failure **`LogError`**, then **`this.ApiServerError<T>(environment, configuration, ex)`** (typed actions) or **`this.ApiServerErrorAction<T>(...)`** (**`IActionResult`** actions, e.g. `File(...)`). Do **not** hand-roll `"An unexpected error occurred."` — use **`Configuration/ControllerServerErrorExtensions`** + **`ApiErrorResponseHelper`** behaviour.
 - New/changed controllers that return 500 from **`catch`** must inject **`IWebHostEnvironment`** and **`IConfiguration`** for those helpers.
 - Services return data only; **build `ApiResponseDto` in the controller.**
 - Use **`[ApiVersion]`** and route **`api/v{version:apiVersion}/[controller]`** for new endpoints.

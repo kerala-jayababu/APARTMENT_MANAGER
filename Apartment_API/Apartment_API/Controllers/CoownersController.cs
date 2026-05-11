@@ -96,7 +96,7 @@ public sealed class CoownersController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] CreateCoOwnerRequest request,
@@ -109,7 +109,7 @@ public sealed class CoownersController(
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Co-owner updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {
@@ -123,7 +123,7 @@ public sealed class CoownersController(
     }
 
     [HttpDelete("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
@@ -133,7 +133,7 @@ public sealed class CoownersController(
         try
         {
             await service.DeleteAsync(apartmentId, id, userId, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Co-owner deleted.", Data = "DELETED" });
         }
         catch (Exception ex)
         {

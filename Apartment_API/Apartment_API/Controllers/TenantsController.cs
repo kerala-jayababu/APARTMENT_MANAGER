@@ -117,7 +117,7 @@ public sealed class TenantsController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] CreateTenantRequest request,
@@ -130,7 +130,7 @@ public sealed class TenantsController(
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Tenant updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {
@@ -144,7 +144,7 @@ public sealed class TenantsController(
     }
 
     [HttpPost("{id:int}/vacate")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Vacate(
         [FromRoute] int id,
         [FromBody] VacateTenantRequest request,
@@ -157,7 +157,7 @@ public sealed class TenantsController(
         try
         {
             await service.VacateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Tenant vacated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {

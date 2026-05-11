@@ -258,7 +258,7 @@ public sealed class UnitsController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] CreateUnitRequest request,
@@ -271,7 +271,7 @@ public sealed class UnitsController(
         try
         {
             await units.UpdateUnitAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Unit updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {

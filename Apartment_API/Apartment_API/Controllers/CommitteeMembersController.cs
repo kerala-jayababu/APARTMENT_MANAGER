@@ -125,7 +125,7 @@ public sealed class CommitteeMembersController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] UpdateCommitteeMemberRequest request,
@@ -136,7 +136,7 @@ public sealed class CommitteeMembersController(
         try
         {
             await service.UpdateMemberAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Committee member updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         catch (Exception ex)
@@ -147,7 +147,7 @@ public sealed class CommitteeMembersController(
     }
 
     [HttpPost("{id:int}/end")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> End(
         [FromRoute] int id,
         [FromBody] EndCommitteeMemberRequest request,
@@ -158,7 +158,7 @@ public sealed class CommitteeMembersController(
         try
         {
             await service.EndMemberAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Committee membership ended.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         catch (Exception ex)

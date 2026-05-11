@@ -178,7 +178,7 @@ public sealed class CommitteeTenuresController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
         [FromBody] CreateCommitteeTenureRequest request,
@@ -189,7 +189,7 @@ public sealed class CommitteeTenuresController(
         try
         {
             await tenureService.UpdateTenureAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Committee tenure updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         catch (Exception ex)
@@ -200,7 +200,7 @@ public sealed class CommitteeTenuresController(
     }
 
     [HttpPost("{id:int}/extend")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Extend(
         [FromRoute] int id,
         [FromBody] ExtendTenureRequest request,
@@ -211,7 +211,7 @@ public sealed class CommitteeTenuresController(
         try
         {
             await tenureService.ExtendTenureAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Committee tenure extended.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         catch (Exception ex)

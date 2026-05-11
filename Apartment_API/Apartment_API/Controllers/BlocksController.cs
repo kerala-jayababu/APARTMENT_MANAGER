@@ -79,7 +79,7 @@ public sealed class BlocksController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(
         [FromRoute] int id,
@@ -93,7 +93,7 @@ public sealed class BlocksController(
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Block updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex)
         {
@@ -102,7 +102,7 @@ public sealed class BlocksController(
     }
 
     [HttpDelete("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken cancellationToken)
@@ -112,7 +112,7 @@ public sealed class BlocksController(
         try
         {
             await service.DeleteAsync(apartmentId, id, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Block deleted.", Data = "DELETED" });
         }
         catch (InvalidOperationException ex)
         {

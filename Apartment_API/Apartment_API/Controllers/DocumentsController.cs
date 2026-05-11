@@ -120,7 +120,7 @@ public sealed class DocumentsController(
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update([FromRoute] int id, [FromBody] UpdateDocumentRequest request, CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId) return Unauthorized();
@@ -128,7 +128,7 @@ public sealed class DocumentsController(
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Document updated.", Data = "UPDATED" });
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         catch (UnauthorizedAccessException ex) { return StatusCode(StatusCodes.Status403Forbidden, ex.Message); }
@@ -179,7 +179,7 @@ public sealed class DocumentsController(
     }
 
     [HttpDelete("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId) return Unauthorized();
@@ -187,7 +187,7 @@ public sealed class DocumentsController(
         try
         {
             await service.DeleteAsync(apartmentId, userId, id, cancellationToken);
-            return NoContent();
+            return Ok(new ApiResponseDto<string> { Success = true, Message = "Document deleted.", Data = "DELETED" });
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         catch (UnauthorizedAccessException ex) { return StatusCode(StatusCodes.Status403Forbidden, ex.Message); }
