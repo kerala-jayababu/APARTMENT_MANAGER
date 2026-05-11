@@ -161,18 +161,17 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             .FirstOrDefaultAsync(s => s.IdUnitStatus == request.UnitStatusId, cancellationToken)
             .ConfigureAwait(false);
         if (st is null) throw new InvalidOperationException("Invalid unitStatusId.");
-        var assignmentRows = BuildUnitOwnerAssignments(request);
         var code = (st.StatusCode ?? "").ToUpperInvariant();
         var statusName = st.StatusName ?? "";
         var impliesOwnerOccupancy =
             code is "OWNED" or "OWN"
             || (statusName.Contains("own", StringComparison.OrdinalIgnoreCase)
                 && !statusName.Contains("rent", StringComparison.OrdinalIgnoreCase));
-        if (impliesOwnerOccupancy && assignmentRows.Count == 0)
+        if (impliesOwnerOccupancy && request.PrimaryOwnerPersonId is null)
             throw new InvalidOperationException(
-                "This status expects at least one existing owner: set ownerAssignments (or legacy primaryOwnerPersonId). Renters use tenant flow; vacant units need no owners.");
-        if (assignmentRows.Count > 0)
-            await ValidateExistingOwnersForUnitAsync(apartmentId, assignmentRows, cancellationToken).ConfigureAwait(false);
+                "This status requires primaryOwnerPersonId. Renters use tenant flow; vacant units need no owner.");
+        if (request.PrimaryOwnerPersonId is { } primaryPersonId)
+            await ValidatePrimaryOwnerForUnitAsync(apartmentId, primaryPersonId, cancellationToken).ConfigureAwait(false);
         var exists = await db.Units.AnyAsync(
             u => u.ApartmentId == apartmentId && u.UnitNumber == request.UnitNumber.Trim() && u.IsActive,
             cancellationToken).ConfigureAwait(false);
@@ -199,7 +198,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             Facing = string.IsNullOrWhiteSpace(request.Facing) ? null : request.Facing!.Trim(),
             UnitStatusId = request.UnitStatusId,
             OwnershipTypeId = request.OwnershipTypeId,
-            IdCurrentOwner = assignmentRows.Count == 0 ? null : assignmentRows.First(a => a.IsPrimary).PersonId,
+            IdCurrentOwner = request.PrimaryOwnerPersonId,
             CurrentMmcAmount = 0,
             OpeningReceivable = request.OpeningReceivable,
             OpeningReceivableAsOn = null,
@@ -209,75 +208,41 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         };
         db.Units.Add(unit);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        foreach (var a in assignmentRows)
+        if (request.PrimaryOwnerPersonId is { } ownerId)
         {
             db.UnitOwners.Add(new UnitOwner
             {
                 ApartmentId = apartmentId,
                 UnitId = unit.IdUnit,
-                PersonId = a.PersonId,
-                IsPrimaryOwner = a.IsPrimary,
-                OwnershipFromDate = a.FromDate,
-                OwnershipSharePct = a.SharePct,
+                PersonId = ownerId,
+                IsPrimaryOwner = true,
+                OwnershipFromDate = (request.PrimaryOwnershipFromDate ?? DateTime.UtcNow).Date,
+                OwnershipSharePct = null,
                 IsActive = true,
                 CreatedAt = now,
                 CreatedBy = userId
             });
-        }
-        if (assignmentRows.Count > 0)
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
         return unit.IdUnit;
     }
 
-    private static List<(int PersonId, bool IsPrimary, DateTime FromDate, decimal? SharePct)> BuildUnitOwnerAssignments(
-        CreateUnitRequest request)
+    private async Task ValidatePrimaryOwnerForUnitAsync(
+        int apartmentId, int personId, CancellationToken cancellationToken)
     {
-        if (request.OwnerAssignments is { Count: > 0 } list)
-        {
-            return list.Select(x => (x.PersonId, x.IsPrimaryOwner, x.OwnershipFromDate.Date, x.OwnershipSharePct))
-                .ToList();
-        }
-        if (request.PrimaryOwnerPersonId is { } pid)
-        {
-            var from = (request.PrimaryOwnershipFromDate ?? DateTime.UtcNow).Date;
-            return [(pid, true, from, null)];
-        }
-        return [];
-    }
-
-    private static bool IsOwnerOrCoOwnerPersonType(string? personTypeCode)
-    {
-        if (string.IsNullOrWhiteSpace(personTypeCode)) return false;
-        var n = personTypeCode.Trim().Replace("-", "_", StringComparison.Ordinal).ToUpperInvariant();
-        return n is "OWNER" or "CO_OWNER";
-    }
-
-    private async Task ValidateExistingOwnersForUnitAsync(
-        int apartmentId,
-        IReadOnlyList<(int PersonId, bool IsPrimary, DateTime FromDate, decimal? SharePct)> rows,
-        CancellationToken cancellationToken)
-    {
-        var primaryCount = rows.Count(r => r.IsPrimary);
-        if (primaryCount != 1)
-            throw new InvalidOperationException("Exactly one primary owner is required when assigning owners.");
-        var dup = rows.GroupBy(r => r.PersonId).FirstOrDefault(g => g.Count() > 1);
-        if (dup is not null)
-            throw new InvalidOperationException("Duplicate person in owner assignments.");
-        var ids = rows.Select(r => r.PersonId).Distinct().ToList();
-        var found = await (
+        var row = await (
             from p in db.Persons.AsNoTracking()
-            where ids.Contains(p.IdPerson) && p.ApartmentId == apartmentId && p.IsActive
+            where p.IdPerson == personId && p.ApartmentId == apartmentId && p.IsActive
             join t in db.PersonTypes.AsNoTracking() on p.PersonTypeId equals t.IdPersonType
             select new { p.IdPerson, t.PersonTypeCode }
-        ).ToListAsync(cancellationToken).ConfigureAwait(false);
-        if (found.Count != ids.Count)
-            throw new InvalidOperationException("One or more persons were not found or are inactive in this apartment.");
-        foreach (var f in found)
-        {
-            if (!IsOwnerOrCoOwnerPersonType(f.PersonTypeCode))
-                throw new InvalidOperationException(
-                    $"Person {f.IdPerson} must have person type OWNER or CO-OWNER (picker scope).");
-        }
+        ).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (row is null)
+            throw new InvalidOperationException("primaryOwnerPersonId was not found or is inactive in this apartment.");
+        var normalized = (row.PersonTypeCode ?? "").Trim()
+            .Replace("-", "_", StringComparison.Ordinal).ToUpperInvariant();
+        if (normalized is not ("OWNER" or "CO_OWNER"))
+            throw new InvalidOperationException(
+                $"Person {row.IdPerson} must have person type OWNER or CO-OWNER to be set as primary owner.");
     }
 
     public async Task UpdateUnitAsync(
