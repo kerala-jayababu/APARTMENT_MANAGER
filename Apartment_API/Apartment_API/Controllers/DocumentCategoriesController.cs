@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -13,7 +15,9 @@ namespace Apartment_API.Controllers;
 [Route("api/v{version:apiVersion}/document-categories")]
 public sealed class DocumentCategoriesController(
     IDocumentService service,
-    ILogger<DocumentCategoriesController> logger) : ControllerBase
+    ILogger<DocumentCategoriesController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<DocumentCategoryDto>>), StatusCodes.Status200OK)]
@@ -34,13 +38,7 @@ public sealed class DocumentCategoriesController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get document categories.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyList<DocumentCategoryDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyList<DocumentCategoryDto>>(environment, configuration, ex);
         }
     }
 }

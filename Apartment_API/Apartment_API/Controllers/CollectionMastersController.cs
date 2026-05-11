@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class CollectionMastersController(
     ICollectionsService service,
     ICurrentUser currentUser,
-    ILogger<CollectionMastersController> logger) : ControllerBase
+    ILogger<CollectionMastersController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("payment-modes")]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<MasterLookupItemDto>>), StatusCodes.Status200OK)]
@@ -28,7 +32,7 @@ public sealed class CollectionMastersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Payment modes.");
-            return ServerError<IReadOnlyList<MasterLookupItemDto>>();
+            return this.ApiServerError<IReadOnlyList<MasterLookupItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -45,7 +49,7 @@ public sealed class CollectionMastersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Income heads.");
-            return ServerError<IReadOnlyList<MasterLookupItemDto>>();
+            return this.ApiServerError<IReadOnlyList<MasterLookupItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -61,7 +65,7 @@ public sealed class CollectionMastersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Invoice statuses.");
-            return ServerError<IReadOnlyList<MasterLookupItemDto>>();
+            return this.ApiServerError<IReadOnlyList<MasterLookupItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -73,8 +77,4 @@ public sealed class CollectionMastersController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

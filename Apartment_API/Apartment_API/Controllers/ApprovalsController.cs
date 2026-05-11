@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -15,7 +17,9 @@ namespace Apartment_API.Controllers;
 public sealed class ApprovalsController(
     IApprovalsInboxService inbox,
     ICurrentUser currentUser,
-    ILogger<ApprovalsController> logger) : ControllerBase
+    ILogger<ApprovalsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     /// <summary>Summary cards: totals per type + aging &gt; 3 days.</summary>
     [HttpGet("summary")]
@@ -32,7 +36,7 @@ public sealed class ApprovalsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Approvals summary.");
-            return ServerError<ApprovalsInboxSummaryDto>();
+            return this.ApiServerError<ApprovalsInboxSummaryDto>(environment, configuration, ex);
         }
     }
 
@@ -61,7 +65,7 @@ public sealed class ApprovalsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Approvals list.");
-            return ServerError<PagedResult<ApprovalInboxItemDto>>();
+            return this.ApiServerError<PagedResult<ApprovalInboxItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -73,8 +77,4 @@ public sealed class ApprovalsController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

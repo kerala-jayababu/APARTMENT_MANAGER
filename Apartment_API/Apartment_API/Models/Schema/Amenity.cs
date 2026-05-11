@@ -30,9 +30,6 @@ public sealed class Amenity
     public byte AdvanceBookingDays { get; set; }
     public int MaxContinuousSessionsAllowed { get; set; }
 
-    [MaxLength(2000)]
-    public string? Rules { get; set; }
-
     [MaxLength(500)]
     public string? ImageUrl { get; set; }
 

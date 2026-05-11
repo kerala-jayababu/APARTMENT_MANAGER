@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class ExpenseHeadsController(
     IExpenseHeadService service,
     ICurrentUser currentUser,
-    ILogger<ExpenseHeadsController> logger) : ControllerBase
+    ILogger<ExpenseHeadsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<ExpenseHeadDto>>), StatusCodes.Status200OK)]
@@ -45,13 +49,7 @@ public sealed class ExpenseHeadsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetExpenseHeads failed.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyList<ExpenseHeadDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyList<ExpenseHeadDto>>(environment, configuration, ex);
         }
     }
 
@@ -102,13 +100,7 @@ public sealed class ExpenseHeadsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById expense head {IdExpenseHead}.", idExpenseHead);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<ExpenseHeadDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<ExpenseHeadDto>(environment, configuration, ex);
         }
     }
 
@@ -178,13 +170,7 @@ public sealed class ExpenseHeadsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Save expense head.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<ExpenseHeadDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<ExpenseHeadDto>(environment, configuration, ex);
         }
     }
 }

@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class ExpensesController(
     IExpenseManagementService service,
     ICurrentUser currentUser,
-    ILogger<ExpensesController> logger) : ControllerBase
+    ILogger<ExpensesController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("summary")]
     public async Task<ActionResult<ApiResponseDto<ExpenseSummaryDto>>> Summary(
@@ -30,7 +34,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<ExpenseSummaryDto>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseSummaryDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Expense summary."); return ServerError<ExpenseSummaryDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Expense summary."); return this.ApiServerError<ExpenseSummaryDto>(environment, configuration, ex); }
     }
 
     [HttpGet("bills")]
@@ -53,7 +57,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<PagedResult<ExpenseBillListItemDto>>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<PagedResult<ExpenseBillListItemDto>> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Expense bills."); return ServerError<PagedResult<ExpenseBillListItemDto>>(); }
+        catch (Exception ex) { logger.LogError(ex, "Expense bills."); return this.ApiServerError<PagedResult<ExpenseBillListItemDto>>(environment, configuration, ex); }
     }
 
     [HttpGet("bills/{billId:long}")]
@@ -67,7 +71,7 @@ public sealed class ExpensesController(
             return Ok(new ApiResponseDto<object> { Success = true, Message = "Expense bill loaded.", Data = data });
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<object>(); }
-        catch (Exception ex) { logger.LogError(ex, "Expense bill {BillId}.", billId); return ServerError<object>(); }
+        catch (Exception ex) { logger.LogError(ex, "Expense bill {BillId}.", billId); return this.ApiServerError<object>(environment, configuration, ex); }
     }
 
     [HttpPost("bills")]
@@ -82,7 +86,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<ExpenseBillUpsertResponseDto>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseBillUpsertResponseDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Create expense bill."); return ServerError<ExpenseBillUpsertResponseDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Create expense bill."); return this.ApiServerError<ExpenseBillUpsertResponseDto>(environment, configuration, ex); }
     }
 
     [HttpPost("bills/contract")]
@@ -97,7 +101,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<ExpenseBillUpsertResponseDto>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseBillUpsertResponseDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Create contract expense."); return ServerError<ExpenseBillUpsertResponseDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Create contract expense."); return this.ApiServerError<ExpenseBillUpsertResponseDto>(environment, configuration, ex); }
     }
 
     [HttpPut("bills/{billId:long}")]
@@ -112,7 +116,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<ExpenseBillUpsertResponseDto>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseBillUpsertResponseDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Update expense bill {BillId}.", billId); return ServerError<ExpenseBillUpsertResponseDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Update expense bill {BillId}.", billId); return this.ApiServerError<ExpenseBillUpsertResponseDto>(environment, configuration, ex); }
     }
 
     [HttpDelete("bills/{billId:long}")]
@@ -126,7 +130,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<ExpenseBillDeleteResponseDto>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseBillDeleteResponseDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Delete expense bill {BillId}.", billId); return ServerError<ExpenseBillDeleteResponseDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Delete expense bill {BillId}.", billId); return this.ApiServerError<ExpenseBillDeleteResponseDto>(environment, configuration, ex); }
     }
 
     [HttpGet("bills/{billId:long}/attachment")]
@@ -140,7 +144,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return StatusCode(StatusCodes.Status403Forbidden); }
         catch (InvalidOperationException ex) { return NotFound(ex.Message); }
-        catch (Exception ex) { logger.LogError(ex, "Download expense attachment {BillId}.", billId); return StatusCode(StatusCodes.Status500InternalServerError); }
+        catch (Exception ex) { logger.LogError(ex, "Download expense attachment {BillId}.", billId); return this.ApiServerErrorAction<object?>(environment, configuration, ex); }
     }
 
     [HttpPost("bills/calculate")]
@@ -152,7 +156,7 @@ public sealed class ExpensesController(
             return Ok(new ApiResponseDto<ExpenseCalculateResponseDto> { Success = true, Message = "Expense totals calculated.", Data = data });
         }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseCalculateResponseDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Calculate expense totals."); return ServerError<ExpenseCalculateResponseDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Calculate expense totals."); return this.ApiServerError<ExpenseCalculateResponseDto>(environment, configuration, ex); }
     }
 
     [HttpGet("budget-check")]
@@ -166,7 +170,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return ForbidResponse<ExpenseBudgetCheckDto>(); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResponseDto<ExpenseBudgetCheckDto> { Success = false, Message = ex.Message, Errors = ["VALIDATION_FAILED"] }); }
-        catch (Exception ex) { logger.LogError(ex, "Expense budget check."); return ServerError<ExpenseBudgetCheckDto>(); }
+        catch (Exception ex) { logger.LogError(ex, "Expense budget check."); return this.ApiServerError<ExpenseBudgetCheckDto>(environment, configuration, ex); }
     }
 
     [HttpGet("bills/export")]
@@ -180,7 +184,7 @@ public sealed class ExpensesController(
         }
         catch (UnauthorizedAccessException) { return StatusCode(StatusCodes.Status403Forbidden); }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
-        catch (Exception ex) { logger.LogError(ex, "Export expense bills."); return StatusCode(StatusCodes.Status500InternalServerError); }
+        catch (Exception ex) { logger.LogError(ex, "Export expense bills."); return this.ApiServerErrorAction<object?>(environment, configuration, ex); }
     }
 
     private ActionResult<ApiResponseDto<T>> Forbidden<T>() =>
@@ -189,6 +193,4 @@ public sealed class ExpensesController(
     private ActionResult<ApiResponseDto<T>> ForbidResponse<T>() =>
         StatusCode(StatusCodes.Status403Forbidden, new ApiResponseDto<T> { Success = false, Message = "FORBIDDEN", Errors = ["FORBIDDEN"] });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError, new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class MmcController(
     IMmcService service,
     ICurrentUser currentUser,
-    ILogger<MmcController> logger) : ControllerBase
+    ILogger<MmcController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("{mmcPeriodId:int}/units")]
     [ProducesResponseType(typeof(ApiResponseDto<MmcGridDto>), StatusCodes.Status200OK)]
@@ -38,7 +42,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get MMC grid.");
-            return ServerError<MmcGridDto>();
+            return this.ApiServerError<MmcGridDto>(environment, configuration, ex);
         }
     }
 
@@ -63,7 +67,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Submit MMC batch.");
-            return ServerError<MmcBatchCreatedDto>();
+            return this.ApiServerError<MmcBatchCreatedDto>(environment, configuration, ex);
         }
     }
 
@@ -85,7 +89,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "List MMC batches.");
-            return ServerError<PagedResult<MmcBatchListDto>>();
+            return this.ApiServerError<PagedResult<MmcBatchListDto>>(environment, configuration, ex);
         }
     }
 
@@ -106,7 +110,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get MMC batch {Id}.", id);
-            return ServerError<MmcBatchDetailDto>();
+            return this.ApiServerError<MmcBatchDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -137,8 +141,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Approve MMC batch {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<object?> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -170,8 +173,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Reject MMC batch {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<object?> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -198,7 +200,7 @@ public sealed class MmcController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Copy MMC from source period.");
-            return ServerError<MmcGridDto>();
+            return this.ApiServerError<MmcGridDto>(environment, configuration, ex);
         }
     }
 
@@ -206,7 +208,4 @@ public sealed class MmcController(
         StatusCode(StatusCodes.Status403Forbidden,
             new ApiResponseDto<T> { Success = false, Message = "Apartment context is required. Use a tenant access token with apartment_id.", Errors = ["NO_APARTMENT_CONTEXT"] });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

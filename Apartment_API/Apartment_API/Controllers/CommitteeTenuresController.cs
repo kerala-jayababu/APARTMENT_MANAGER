@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -15,7 +17,9 @@ public sealed class CommitteeTenuresController(
     ICommitteeTenureService tenureService,
     ICommitteeMemberService memberService,
     ICurrentUser currentUser,
-    ILogger<CommitteeTenuresController> logger) : ControllerBase
+    ILogger<CommitteeTenuresController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<CommitteeTenureListDto>>), StatusCodes.Status200OK)]
@@ -35,7 +39,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "List tenures.");
-            return ServerError<PagedResult<CommitteeTenureListDto>>();
+            return this.ApiServerError<PagedResult<CommitteeTenureListDto>>(environment, configuration, ex);
         }
     }
 
@@ -56,7 +60,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get active tenure.");
-            return ServerError<CommitteeTenureDetailDto>();
+            return this.ApiServerError<CommitteeTenureDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -79,7 +83,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Tenure history.");
-            return ServerError<PagedResult<CommitteeTenureHistoryDto>>();
+            return this.ApiServerError<PagedResult<CommitteeTenureHistoryDto>>(environment, configuration, ex);
         }
     }
 
@@ -102,7 +106,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get tenure {Id}.", id);
-            return ServerError<CommitteeTenureDetailDto>();
+            return this.ApiServerError<CommitteeTenureDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -122,7 +126,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get extensions {Id}.", id);
-            return ServerError<IReadOnlyList<TenureExtensionDto>>();
+            return this.ApiServerError<IReadOnlyList<TenureExtensionDto>>(environment, configuration, ex);
         }
     }
 
@@ -142,7 +146,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get members for tenure {Id}.", id);
-            return ServerError<IReadOnlyList<CommitteeMemberListDto>>();
+            return this.ApiServerError<IReadOnlyList<CommitteeMemberListDto>>(environment, configuration, ex);
         }
     }
 
@@ -169,7 +173,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create tenure.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -191,7 +195,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update tenure {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -213,7 +217,7 @@ public sealed class CommitteeTenuresController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Extend tenure {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -225,8 +229,4 @@ public sealed class CommitteeTenuresController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

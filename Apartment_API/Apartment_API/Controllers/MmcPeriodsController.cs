@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class MmcPeriodsController(
     IMmcService service,
     ICurrentUser currentUser,
-    ILogger<MmcPeriodsController> logger) : ControllerBase
+    ILogger<MmcPeriodsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<MmcPeriodDto>>), StatusCodes.Status200OK)]
@@ -32,7 +36,7 @@ public sealed class MmcPeriodsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "List MMC periods.");
-            return ServerError<IReadOnlyList<MmcPeriodDto>>();
+            return this.ApiServerError<IReadOnlyList<MmcPeriodDto>>(environment, configuration, ex);
         }
     }
 
@@ -52,7 +56,7 @@ public sealed class MmcPeriodsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get current MMC period.");
-            return ServerError<MmcPeriodDto>();
+            return this.ApiServerError<MmcPeriodDto>(environment, configuration, ex);
         }
     }
 
@@ -79,15 +83,11 @@ public sealed class MmcPeriodsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create MMC period.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
     private ActionResult<ApiResponseDto<T>> Forbidden<T>() =>
         StatusCode(StatusCodes.Status403Forbidden,
-            new ApiResponseDto<T> { Success = false, Message = "Apartment context is required. Use a tenant access token with apartment_id.", Errors = ["NO_APARTMENT_CONTEXT"] });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
+            new ApiResponseDto<T> { Success = false, Message = "Apartment context is required. Use a tenant access token with apartment_id.",             Errors = ["NO_APARTMENT_CONTEXT"] });
 }

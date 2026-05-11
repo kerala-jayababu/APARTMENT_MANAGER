@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -17,7 +19,9 @@ public sealed class AuthController(
     IOtpAuthService otpAuthService,
     IApartmentAuthService apartmentAuthService,
     ICurrentUser currentUser,
-    ILogger<AuthController> logger) : ControllerBase
+    ILogger<AuthController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     /// <summary>Who am I, based on the Bearer token (selection or access JWT).</summary>
     [HttpGet("me")]
@@ -94,13 +98,7 @@ public sealed class AuthController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error during registration.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<UserPublicDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<UserPublicDto>(environment, configuration, ex);
         }
     }
 
@@ -153,13 +151,7 @@ public sealed class AuthController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error during login.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<LoginAuthenticationResultDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<LoginAuthenticationResultDto>(environment, configuration, ex);
         }
     }
 
@@ -194,13 +186,7 @@ public sealed class AuthController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error sending login OTP email.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<object?>
-                {
-                    Success = false,
-                    Message = "Could not send login code. Try again later.",
-                    Errors = ["EMAIL_SEND_FAILED"]
-                });
+            return this.ApiServerError<object?>(environment, configuration, ex);
         }
     }
 
@@ -255,13 +241,7 @@ public sealed class AuthController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error during OTP verification.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<LoginAuthenticationResultDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<LoginAuthenticationResultDto>(environment, configuration, ex);
         }
     }
 
@@ -295,13 +275,7 @@ public sealed class AuthController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetUserApartments");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyList<AvailableApartmentItemDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyList<AvailableApartmentItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -384,13 +358,7 @@ public sealed class AuthController(
         catch (Exception ex)
         {
             logger.LogError(ex, "CreateTenantAccessToken");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<TenantTokenResponseDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<TenantTokenResponseDto>(environment, configuration, ex);
         }
     }
 }

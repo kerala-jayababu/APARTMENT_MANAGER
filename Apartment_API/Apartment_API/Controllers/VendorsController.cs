@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class VendorsController(
     IVendorService service,
     ICurrentUser currentUser,
-    ILogger<VendorsController> logger) : ControllerBase
+    ILogger<VendorsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<VendorDto>>), StatusCodes.Status200OK)]
@@ -45,13 +49,7 @@ public sealed class VendorsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetVendors failed.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyList<VendorDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyList<VendorDto>>(environment, configuration, ex);
         }
     }
 
@@ -102,13 +100,7 @@ public sealed class VendorsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById vendor {IdVendor}.", idVendor);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<VendorDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<VendorDto>(environment, configuration, ex);
         }
     }
 
@@ -179,13 +171,7 @@ public sealed class VendorsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Save vendor.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<VendorDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<VendorDto>(environment, configuration, ex);
         }
     }
 }

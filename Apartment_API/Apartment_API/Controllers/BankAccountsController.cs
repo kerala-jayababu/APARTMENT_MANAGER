@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class BankAccountsController(
     IBankAccountService service,
     ICurrentUser currentUser,
-    ILogger<BankAccountsController> logger) : ControllerBase
+    ILogger<BankAccountsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<BankAccountDto>>), StatusCodes.Status200OK)]
@@ -45,13 +49,7 @@ public sealed class BankAccountsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetBankAccounts failed.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyList<BankAccountDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyList<BankAccountDto>>(environment, configuration, ex);
         }
     }
 
@@ -102,13 +100,7 @@ public sealed class BankAccountsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById bank account {IdBankAccount}.", idBankAccount);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<BankAccountDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<BankAccountDto>(environment, configuration, ex);
         }
     }
 
@@ -179,13 +171,7 @@ public sealed class BankAccountsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Save bank account.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<BankAccountDto>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<BankAccountDto>(environment, configuration, ex);
         }
     }
 }

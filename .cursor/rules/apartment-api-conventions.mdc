@@ -1,5 +1,5 @@
 ---
-description: Apartment API response wrapper, try/catch, and layering. Applies when editing the Apartment_API Web API.
+description: Apartment API response wrapper, try/catch, 500 helpers, and layering. Applies when editing the Apartment_API Web API.
 globs: Apartment_API/**/*.cs
 alwaysApply: false
 ---
@@ -10,9 +10,10 @@ When changing files under `Apartment_API/`, follow the full spec in [`.cursor/sk
 
 **Non-negotiables (summary):**
 
-- Controllers return **`ActionResult<ApiResponseDto<T>>`**, not raw DTOs/entities.
-- Controllers use **`try` / `catch`**: on failure log and return **500** with **`ApiResponseDto`** (`Success: false`, `Errors`).
+- Controllers return **`ActionResult<ApiResponseDto<T>>`** (or agreed variants), not raw DTOs/entities.
+- Controllers use **`try` / `catch`**: on unexpected failure **`LogError`**, then **`this.ApiServerError<T>(environment, configuration, ex)`** (typed actions) or **`this.ApiServerErrorAction<T>(...)`** (**`IActionResult`** actions, e.g. `NoContent` / file). Do **not** hand-roll `"An unexpected error occurred."` — use **`Configuration/ControllerServerErrorExtensions`** + **`ApiErrorResponseHelper`** behaviour.
+- New/changed controllers that return 500 from **`catch`** must inject **`IWebHostEnvironment`** and **`IConfiguration`** for those helpers.
 - Services return data only; **build `ApiResponseDto` in the controller.**
 - Use **`[ApiVersion]`** and route **`api/v{version:apiVersion}/[controller]`** for new endpoints.
 
-If that skill file is missing, match existing patterns in `ApartmentsController` and `Program.cs`.
+If that skill file is missing, match existing patterns in **`ControllerServerErrorExtensions`**, **`AmenitiesController`**, **`ApartmentsController`**, and **`Program.cs`**.

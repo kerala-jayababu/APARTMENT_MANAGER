@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class DocumentsController(
     IDocumentService service,
     ICurrentUser currentUser,
-    ILogger<DocumentsController> logger) : ControllerBase
+    ILogger<DocumentsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<DocumentListDto>>), StatusCodes.Status200OK)]
@@ -48,7 +52,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetList documents.");
-            return ServerError<PagedResult<DocumentListDto>>();
+            return this.ApiServerError<PagedResult<DocumentListDto>>(environment, configuration, ex);
         }
     }
 
@@ -68,7 +72,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get document {Id}.", id);
-            return ServerError<DocumentDetailDto>();
+            return this.ApiServerError<DocumentDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -111,7 +115,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Upload document.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -131,7 +135,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update document {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -149,7 +153,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Download document {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -170,7 +174,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Preview document {Id}.", id);
-            return ServerError<DocumentPreviewUrlDto>();
+            return this.ApiServerError<DocumentPreviewUrlDto>(environment, configuration, ex);
         }
     }
 
@@ -190,7 +194,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete document {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -215,7 +219,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Linked entities {Type}.", type);
-            return ServerError<IReadOnlyList<LinkedEntityDto>>();
+            return this.ApiServerError<IReadOnlyList<LinkedEntityDto>>(environment, configuration, ex);
         }
     }
 
@@ -239,7 +243,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Expiring documents.");
-            return ServerError<IReadOnlyList<ExpiringDocumentDto>>();
+            return this.ApiServerError<IReadOnlyList<ExpiringDocumentDto>>(environment, configuration, ex);
         }
     }
 
@@ -256,7 +260,7 @@ public sealed class DocumentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Document stats.");
-            return ServerError<DocumentStatsDto>();
+            return this.ApiServerError<DocumentStatsDto>(environment, configuration, ex);
         }
     }
 
@@ -268,8 +272,4 @@ public sealed class DocumentsController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

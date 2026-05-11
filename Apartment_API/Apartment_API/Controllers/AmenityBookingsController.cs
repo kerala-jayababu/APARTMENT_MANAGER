@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class AmenityBookingsController(
     IAmenityService service,
     ICurrentUser currentUser,
-    ILogger<AmenityBookingsController> logger) : ControllerBase
+    ILogger<AmenityBookingsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<AmenityBookingListDto>>), StatusCodes.Status200OK)]
@@ -40,7 +44,7 @@ public sealed class AmenityBookingsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get amenity bookings.");
-            return ServerError<IReadOnlyList<AmenityBookingListDto>>();
+            return this.ApiServerError<IReadOnlyList<AmenityBookingListDto>>(environment, configuration, ex);
         }
     }
 
@@ -86,7 +90,7 @@ public sealed class AmenityBookingsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create amenity booking.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -115,7 +119,7 @@ public sealed class AmenityBookingsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update amenity booking {Id}.", id);
-            return ServerError<string>();
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 
@@ -144,7 +148,7 @@ public sealed class AmenityBookingsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Cancel amenity booking {Id}.", id);
-            return ServerError<string>();
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 
@@ -156,8 +160,4 @@ public sealed class AmenityBookingsController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

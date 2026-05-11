@@ -3,8 +3,10 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -16,7 +18,9 @@ namespace Apartment_API.Controllers;
 public sealed class BudgetRevisionsController(
     IBudgetRevisionService service,
     ICurrentUser currentUser,
-    ILogger<BudgetRevisionsController> logger) : ControllerBase
+    ILogger<BudgetRevisionsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<BudgetRevisionBatchListItemDto>>), StatusCodes.Status200OK)]
@@ -43,7 +47,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "List budget revision batches.");
-            return ServerError<PagedResult<BudgetRevisionBatchListItemDto>>();
+            return this.ApiServerError<PagedResult<BudgetRevisionBatchListItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -64,7 +68,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Eligible budgets for budget revision.");
-            return ServerError<EligibleBudgetListDto>();
+            return this.ApiServerError<EligibleBudgetListDto>(environment, configuration, ex);
         }
     }
 
@@ -85,7 +89,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Budget revision summary.");
-            return ServerError<BudgetRevisionSummaryDto>();
+            return this.ApiServerError<BudgetRevisionSummaryDto>(environment, configuration, ex);
         }
     }
 
@@ -110,7 +114,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get budget revision line.");
-            return ServerError<BudgetRevisionLineDetailDto>();
+            return this.ApiServerError<BudgetRevisionLineDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -142,7 +146,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create budget revision draft.");
-            return ServerError<CreateBudgetRevisionBatchResultDto>();
+            return this.ApiServerError<CreateBudgetRevisionBatchResultDto>(environment, configuration, ex);
         }
     }
 
@@ -175,7 +179,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Replace budget revision draft.");
-            return ServerError<CreateBudgetRevisionBatchResultDto>();
+            return this.ApiServerError<CreateBudgetRevisionBatchResultDto>(environment, configuration, ex);
         }
     }
 
@@ -208,7 +212,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Patch budget revision line.");
-            return ServerError<BudgetRevisionLineDetailDto>();
+            return this.ApiServerError<BudgetRevisionLineDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -238,7 +242,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete budget revision line.");
-            return ServerError<object?>();
+            return this.ApiServerError<object?>(environment, configuration, ex);
         }
     }
 
@@ -268,7 +272,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete budget revision batch.");
-            return ServerError<object?>();
+            return this.ApiServerError<object?>(environment, configuration, ex);
         }
     }
 
@@ -302,7 +306,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Submit budget revision batch.");
-            return ServerError<BudgetRevisionSubmitResultDto>();
+            return this.ApiServerError<BudgetRevisionSubmitResultDto>(environment, configuration, ex);
         }
     }
 
@@ -336,7 +340,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Recall budget revision batch.");
-            return ServerError<BudgetRevisionBatchDetailDto>();
+            return this.ApiServerError<BudgetRevisionBatchDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -370,7 +374,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Approve budget revision batch.");
-            return ServerError<BudgetRevisionApproveResultDto>();
+            return this.ApiServerError<BudgetRevisionApproveResultDto>(environment, configuration, ex);
         }
     }
 
@@ -403,7 +407,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Reject budget revision batch.");
-            return ServerError<BudgetRevisionRejectResultDto>();
+            return this.ApiServerError<BudgetRevisionRejectResultDto>(environment, configuration, ex);
         }
     }
 
@@ -436,7 +440,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Upload budget revision file.");
-            return ServerError<BudgetRevisionFileUploadDto>();
+            return this.ApiServerError<BudgetRevisionFileUploadDto>(environment, configuration, ex);
         }
     }
 
@@ -461,7 +465,7 @@ public sealed class BudgetRevisionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get budget revision batch.");
-            return ServerError<BudgetRevisionBatchDetailDto>();
+            return this.ApiServerError<BudgetRevisionBatchDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -493,7 +497,4 @@ public sealed class BudgetRevisionsController(
         StatusCode(StatusCodes.Status403Forbidden,
             new ApiResponseDto<T> { Success = false, Message = "FORBIDDEN", Errors = ["FORBIDDEN"] });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

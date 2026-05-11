@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class BudgetsController(
     IBudgetService service,
     ICurrentUser currentUser,
-    ILogger<BudgetsController> logger) : ControllerBase
+    ILogger<BudgetsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("{fiscalYearId:int}")]
     [ProducesResponseType(typeof(ApiResponseDto<BudgetDetailDto>), StatusCodes.Status200OK)]
@@ -36,7 +40,7 @@ public sealed class BudgetsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get budget detail {FiscalYearId}.", fiscalYearId);
-            return ServerError<BudgetDetailDto>();
+            return this.ApiServerError<BudgetDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -63,7 +67,7 @@ public sealed class BudgetsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Save budget lines {FiscalYearId}.", fiscalYearId);
-            return ServerError<BudgetDetailDto>();
+            return this.ApiServerError<BudgetDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -75,8 +79,4 @@ public sealed class BudgetsController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

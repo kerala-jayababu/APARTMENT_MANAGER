@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class CollectionsController(
     ICollectionsService service,
     ICurrentUser currentUser,
-    ILogger<CollectionsController> logger) : ControllerBase
+    ILogger<CollectionsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("summary")]
     [ProducesResponseType(typeof(ApiResponseDto<CollectionsSummaryDto>), StatusCodes.Status200OK)]
@@ -37,7 +41,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Collections summary.");
-            return ServerError<CollectionsSummaryDto>();
+            return this.ApiServerError<CollectionsSummaryDto>(environment, configuration, ex);
         }
     }
 
@@ -69,7 +73,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Collections invoices.");
-            return ServerError<PagedResult<CollectionInvoiceListItemDto>>();
+            return this.ApiServerError<PagedResult<CollectionInvoiceListItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -93,7 +97,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get invoice {InvoiceId}.", invoiceId);
-            return ServerError<CollectionInvoiceDetailDto>();
+            return this.ApiServerError<CollectionInvoiceDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -117,7 +121,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Export invoices.");
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -143,7 +147,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Quick post pending.");
-            return ServerError<IReadOnlyList<QuickPostPendingItemDto>>();
+            return this.ApiServerError<IReadOnlyList<QuickPostPendingItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -172,7 +176,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Quick post save.");
-            return ServerError<SaveQuickPostReceiptsResponseDto>();
+            return this.ApiServerError<SaveQuickPostReceiptsResponseDto>(environment, configuration, ex);
         }
     }
 
@@ -196,7 +200,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get receipt {ReceiptId}.", receiptId);
-            return ServerError<ReceiptDetailDto>();
+            return this.ApiServerError<ReceiptDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -226,7 +230,7 @@ public sealed class CollectionsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Cancel receipt {ReceiptId}.", receiptId);
-            return ServerError<CancelReceiptResponseDto>();
+            return this.ApiServerError<CancelReceiptResponseDto>(environment, configuration, ex);
         }
     }
 
@@ -238,8 +242,4 @@ public sealed class CollectionsController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

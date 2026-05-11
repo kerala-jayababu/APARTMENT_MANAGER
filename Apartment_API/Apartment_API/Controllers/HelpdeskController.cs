@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class HelpdeskController(
     IHelpdeskService helpdesk,
     ICurrentUser currentUser,
-    ILogger<HelpdeskController> logger) : ControllerBase
+    ILogger<HelpdeskController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("categories")]
     [ProducesResponseType(typeof(ApiResponseDto<HelpDeskCategoryListDto>), StatusCodes.Status200OK)]
@@ -34,7 +38,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk categories list.");
-            return ServerError<HelpDeskCategoryListDto>();
+            return this.ApiServerError<HelpDeskCategoryListDto>(environment, configuration, ex);
         }
     }
 
@@ -61,7 +65,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk category {Id}.", id);
-            return ServerError<HelpDeskCategoryDto>();
+            return this.ApiServerError<HelpDeskCategoryDto>(environment, configuration, ex);
         }
     }
 
@@ -96,7 +100,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create helpdesk category.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -133,7 +137,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update helpdesk category {Id}.", id);
-            return ServerError<object?>();
+            return this.ApiServerError<object?>(environment, configuration, ex);
         }
     }
 
@@ -165,7 +169,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete helpdesk category {Id}.", id);
-            return ServerError<object?>();
+            return this.ApiServerError<object?>(environment, configuration, ex);
         }
     }
 
@@ -195,7 +199,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Log complaint.");
-            return ServerError<LogComplaintResponseDto>();
+            return this.ApiServerError<LogComplaintResponseDto>(environment, configuration, ex);
         }
     }
 
@@ -231,7 +235,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "List complaints.");
-            return ServerError<PagedResult<ComplaintListItemDto>>();
+            return this.ApiServerError<PagedResult<ComplaintListItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -259,7 +263,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get complaint {Id}.", id);
-            return ServerError<ComplaintDetailDto>();
+            return this.ApiServerError<ComplaintDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -298,7 +302,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Append complaint status {Id}.", id);
-            return ServerError<AppendComplaintStatusResponseDto>();
+            return this.ApiServerError<AppendComplaintStatusResponseDto>(environment, configuration, ex);
         }
     }
 
@@ -323,7 +327,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Complaint status timeline {Id}.", id);
-            return ServerError<IReadOnlyList<HelpdeskStatusEntryDto>>();
+            return this.ApiServerError<IReadOnlyList<HelpdeskStatusEntryDto>>(environment, configuration, ex);
         }
     }
 
@@ -366,7 +370,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk file upload.");
-            return ServerError<HelpdeskFileUploadDto>();
+            return this.ApiServerError<HelpdeskFileUploadDto>(environment, configuration, ex);
         }
     }
 
@@ -395,7 +399,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk stats.");
-            return ServerError<HelpdeskStatsDto>();
+            return this.ApiServerError<HelpdeskStatsDto>(environment, configuration, ex);
         }
     }
 
@@ -431,7 +435,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk status summary report.");
-            return ServerError<StatusSummaryReportDto>();
+            return this.ApiServerError<StatusSummaryReportDto>(environment, configuration, ex);
         }
     }
 
@@ -467,7 +471,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk category breakdown report.");
-            return ServerError<CategoryBreakdownReportDto>();
+            return this.ApiServerError<CategoryBreakdownReportDto>(environment, configuration, ex);
         }
     }
 
@@ -502,7 +506,7 @@ public sealed class HelpdeskController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Helpdesk aging report.");
-            return ServerError<AgingReportDto>();
+            return this.ApiServerError<AgingReportDto>(environment, configuration, ex);
         }
     }
 
@@ -525,8 +529,4 @@ public sealed class HelpdeskController(
         StatusCode(StatusCodes.Status403Forbidden,
             new ApiResponseDto<T> { Success = false, Message = "This action requires apartment administrator access.", Errors = ["FORBIDDEN"] });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T>
-                { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

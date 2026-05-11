@@ -54,6 +54,49 @@ public sealed class AmenityService(AppDbContext db) : IAmenityService
         }).ToList();
     }
 
+    public async Task<AmenityListDto?> GetByIdAsync(int apartmentId, int id, CancellationToken cancellationToken = default)
+    {
+        var x = await db.Amenities.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ApartmentId == apartmentId && a.IdAmenity == id, cancellationToken)
+            .ConfigureAwait(false);
+        if (x is null) return null;
+
+        var typeName = await db.AmenityTypes.AsNoTracking()
+            .Where(t => t.IdAmenityType == x.AmenityTypeId)
+            .Select(t => t.AmenityTypeName)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var incomeName = await db.IncomeHeads.AsNoTracking()
+            .Where(h => h.IdIncomeHead == x.IncomeHeadId)
+            .Select(h => h.HeadName)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var chargeName = await db.BookingChargeTypes.AsNoTracking()
+            .Where(c => c.IdBookingChargeType == x.ChargeTypeId)
+            .Select(c => c.ChargeTypeName)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new AmenityListDto
+        {
+            Id = x.IdAmenity,
+            AmenityTypeId = x.AmenityTypeId,
+            AmenityTypeName = typeName ?? string.Empty,
+            IncomeHeadId = x.IncomeHeadId,
+            IncomeHeadName = incomeName ?? string.Empty,
+            AmenityName = x.AmenityName,
+            Description = x.Description,
+            Capacity = x.Capacity,
+            ChargeTypeId = x.ChargeTypeId,
+            ChargeTypeName = chargeName ?? string.Empty,
+            ChargeAmount = x.ChargeAmount,
+            AdvanceBookingDays = x.AdvanceBookingDays,
+            MaxContinuousSessionsAllowed = x.MaxContinuousSessionsAllowed,
+            ImageUrl = x.ImageUrl,
+            IsActive = x.IsActive
+        };
+    }
+
     public async Task<int> CreateAsync(
         int apartmentId, int userId, CreateAmenityRequest request, CancellationToken cancellationToken = default)
     {

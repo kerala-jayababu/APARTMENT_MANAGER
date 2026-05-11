@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class ApartmentsController(
     IApartmentService apartmentService,
     ICurrentUser currentUser,
-    ILogger<ApartmentsController> logger) : ControllerBase
+    ILogger<ApartmentsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyCollection<ApartmentDto>>), StatusCodes.Status200OK)]
@@ -38,13 +42,7 @@ public sealed class ApartmentsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error while getting apartments.");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyCollection<ApartmentDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyCollection<ApartmentDto>>(environment, configuration, ex);
         }
     }
 }

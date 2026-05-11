@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class TenantsController(
     ITenantResidentService service,
     ICurrentUser currentUser,
-    ILogger<TenantsController> logger) : ControllerBase
+    ILogger<TenantsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<TenantListDto>>), StatusCodes.Status200OK)]
@@ -38,7 +42,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetList tenants.");
-            return ServerError<PagedResult<TenantListDto>>();
+            return this.ApiServerError<PagedResult<TenantListDto>>(environment, configuration, ex);
         }
     }
 
@@ -58,7 +62,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetExpiring.");
-            return ServerError<IReadOnlyList<TenantListDto>>();
+            return this.ApiServerError<IReadOnlyList<TenantListDto>>(environment, configuration, ex);
         }
     }
 
@@ -81,7 +85,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById tenant {Id}.", id);
-            return ServerError<TenantListDto>();
+            return this.ApiServerError<TenantListDto>(environment, configuration, ex);
         }
     }
 
@@ -108,7 +112,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create tenant.");
-            return ServerError<TenantCreatedDto>();
+            return this.ApiServerError<TenantCreatedDto>(environment, configuration, ex);
         }
     }
 
@@ -135,7 +139,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update tenant {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -162,7 +166,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Vacate tenant {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -193,7 +197,7 @@ public sealed class TenantsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "UploadLeaseDoc {Id}.", id);
-            return ServerError<IdProofResultDto>();
+            return this.ApiServerError<IdProofResultDto>(environment, configuration, ex);
         }
     }
 
@@ -205,8 +209,4 @@ public sealed class TenantsController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

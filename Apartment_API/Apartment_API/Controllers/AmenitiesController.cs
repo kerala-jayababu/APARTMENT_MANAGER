@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class AmenitiesController(
     IAmenityService service,
     ICurrentUser currentUser,
-    ILogger<AmenitiesController> logger) : ControllerBase
+    ILogger<AmenitiesController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<AmenityListDto>>), StatusCodes.Status200OK)]
@@ -32,7 +36,7 @@ public sealed class AmenitiesController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetList amenities.");
-            return ServerError<IReadOnlyList<AmenityListDto>>();
+            return this.ApiServerError<IReadOnlyList<AmenityListDto>>(environment, configuration, ex);
         }
     }
 
@@ -59,29 +63,44 @@ public sealed class AmenitiesController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create amenity.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Update(
+    [ProducesResponseType(typeof(ApiResponseDto<AmenityListDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<AmenityListDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<AmenityListDto>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponseDto<AmenityListDto>>> Update(
         [FromRoute] int id,
         [FromBody] CreateAmenityRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (currentUser.IdUser is not { } userId) return Unauthorized();
-        if (currentUser.IdApartment is not { } apartmentId) return StatusCode(StatusCodes.Status403Forbidden);
+        if (currentUser.IdUser is not { } userId)
+            return Unauthorized(new ApiResponseDto<AmenityListDto> { Success = false, Message = "User id is not available in the token." });
+        if (currentUser.IdApartment is not { } apartmentId)
+            return Forbidden<AmenityListDto>();
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
-            return NoContent();
+            var data = await service.GetByIdAsync(apartmentId, id, cancellationToken);
+            if (data is null)
+            {
+                return NotFound(new ApiResponseDto<AmenityListDto>
+                    { Success = false, Message = "Amenity not found." });
+            }
+
+            return Ok(new ApiResponseDto<AmenityListDto>
+                { Success = true, Message = "Amenity updated.", Data = data });
         }
-        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponseDto<AmenityListDto> { Success = false, Message = ex.Message });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Update amenity {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerError<AmenityListDto>(environment, configuration, ex);
         }
     }
 
@@ -94,7 +113,4 @@ public sealed class AmenitiesController(
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
 
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

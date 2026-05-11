@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class CommitteeMembersController(
     ICommitteeMemberService service,
     ICurrentUser currentUser,
-    ILogger<CommitteeMembersController> logger) : ControllerBase
+    ILogger<CommitteeMembersController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<CommitteeMemberListDto>>), StatusCodes.Status200OK)]
@@ -38,7 +42,7 @@ public sealed class CommitteeMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "List committee members.");
-            return ServerError<PagedResult<CommitteeMemberListDto>>();
+            return this.ApiServerError<PagedResult<CommitteeMemberListDto>>(environment, configuration, ex);
         }
     }
 
@@ -66,7 +70,7 @@ public sealed class CommitteeMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Eligible owners.");
-            return ServerError<IReadOnlyList<EligibleOwnerDto>>();
+            return this.ApiServerError<IReadOnlyList<EligibleOwnerDto>>(environment, configuration, ex);
         }
     }
 
@@ -89,7 +93,7 @@ public sealed class CommitteeMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get member {Id}.", id);
-            return ServerError<CommitteeMemberListDto>();
+            return this.ApiServerError<CommitteeMemberListDto>(environment, configuration, ex);
         }
     }
 
@@ -116,7 +120,7 @@ public sealed class CommitteeMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Assign member.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -138,7 +142,7 @@ public sealed class CommitteeMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update member {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -160,7 +164,7 @@ public sealed class CommitteeMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "End member {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -172,8 +176,4 @@ public sealed class CommitteeMembersController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

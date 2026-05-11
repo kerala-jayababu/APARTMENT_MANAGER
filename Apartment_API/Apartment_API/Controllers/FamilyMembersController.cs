@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class FamilyMembersController(
     IFamilyMemberResidentService service,
     ICurrentUser currentUser,
-    ILogger<FamilyMembersController> logger) : ControllerBase
+    ILogger<FamilyMembersController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<FamilyMemberDto>>), StatusCodes.Status200OK)]
@@ -35,7 +39,7 @@ public sealed class FamilyMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetList family members.");
-            return ServerError<PagedResult<FamilyMemberDto>>();
+            return this.ApiServerError<PagedResult<FamilyMemberDto>>(environment, configuration, ex);
         }
     }
 
@@ -58,7 +62,7 @@ public sealed class FamilyMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById family member {Id}.", id);
-            return ServerError<FamilyMemberDto>();
+            return this.ApiServerError<FamilyMemberDto>(environment, configuration, ex);
         }
     }
 
@@ -85,7 +89,7 @@ public sealed class FamilyMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create family member.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -108,7 +112,7 @@ public sealed class FamilyMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update family member {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -126,7 +130,7 @@ public sealed class FamilyMembersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete family member {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -138,8 +142,4 @@ public sealed class FamilyMembersController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

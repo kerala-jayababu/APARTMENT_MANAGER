@@ -1,11 +1,11 @@
 ---
 name: apartment-api-conventions
-description: Enforces Apartment_API patterns—ApiResponseDto return types, controller try/catch, logging, API versioning, and folder layout. Use when editing or adding controllers, services, DTOs, or API endpoints in the Apartment_API project, or when the user asks for API conventions, standard responses, or error handling.
+description: Enforces Apartment_API patterns—ApiResponseDto return types, controller try/catch, ApiServerError helpers, logging, API versioning, and folder layout. Use when editing or adding controllers, services, DTOs, or API endpoints in the Apartment_API project, or when the user asks for API conventions, standard responses, or error handling.
 ---
 
 # Apartment API conventions
 
-Applies to `Apartment_API/Apartment_API/`. When adding or changing API code, follow these rules.
+Applies to `Apartment_API/Apartment_API/`. When adding or changing API code, follow these rules **every time** you create or edit controllers/endpoints.
 
 ## Return types (mandatory)
 
@@ -17,11 +17,51 @@ Applies to `Apartment_API/Apartment_API/`. When adding or changing API code, fol
 - On failure: `Success = false`, set `Message`, set `Errors` (e.g. error codes or short strings); omit or leave `Data` null.
 - Add `[ProducesResponseType(typeof(ApiResponseDto<...>), StatusCodes....)]` for documented status codes (200, 400, 404, 500, etc.).
 
-## try/catch in controllers (mandatory)
+## 500 errors in controllers (mandatory — do not hand-roll generic 500 bodies)
+
+**Never** return a hard-coded 500 like `Message = "An unexpected error occurred."` and only `Errors = ["INTERNAL_SERVER_ERROR"]` from controllers. That hides real failures and bypasses the shared policy.
+
+### Use the extensions (always)
+
+From **`Apartment_API.Configuration.ControllerServerErrorExtensions`**:
+
+| Action return type | On unhandled `Exception` after `LogError` |
+|--------------------|-------------------------------------------|
+| `Task<ActionResult<ApiResponseDto<T>>>` (or any typed `ActionResult<ApiResponseDto<...>>`) | `return this.ApiServerError<T>(environment, configuration, ex);` |
+| `Task<IActionResult>` (e.g. `NoContent()`, `File(...)`) | `return this.ApiServerErrorAction<T>(environment, configuration, ex);` |
+
+- **`ApiServerError<T>`** builds `ActionResult<ApiResponseDto<T>>`.
+- **`ApiServerErrorAction<T>`** builds **`IActionResult`**. Use this for actions that return **`IActionResult`** — **`ActionResult<...>` does not implicitly convert to `IActionResult`** in all cases.
+- For “no payload” error JSON, use **`object?`** as `T` when appropriate (e.g. `ApiServerErrorAction<object?>(...)`).
+
+### Controller constructor (when you have a `catch (Exception)` that returns 500)
+
+Inject **`IWebHostEnvironment environment`** and **`IConfiguration configuration`** in the controller’s primary constructor (alongside existing services/logger) **whenever** the controller uses `ApiServerError` / `ApiServerErrorAction`.
+
+Usings typically needed:
+
+- `Microsoft.AspNetCore.Hosting`
+- `Microsoft.Extensions.Configuration`
+
+### Behaviour (trust the helper)
+
+`ApiServerError` / `ApiServerErrorAction` delegate to **`ApiErrorResponseHelper.FormatException`**:
+
+- In **Development** (`IWebHostEnvironment.IsDevelopment()`), **or** when config **`Api:ExposeExceptionDetails`** is **`true`**: the client gets the **real exception message** (and a second `errors` entry with type + message).
+- Otherwise: generic safe message **`"An unexpected error occurred."`** and **`INTERNAL_SERVER_ERROR`** only.
+
+Do **not** duplicate that logic in controllers.
+
+### try/catch in controllers
 
 - Wrap the action body in **`try/catch`**. Call services inside `try`.
-- On exception: log with **`ILogger<TController>`** (`LogError` with exception), return **`StatusCode(500, new ApiResponseDto<...> { Success = false, Message = "...", Errors = ["INTERNAL_SERVER_ERROR"] })`** (or a more specific error code when appropriate).
-- Re-throw only if a global exception middleware is agreed for the project; default pattern here is **catch, log, return 500 with ApiResponseDto**.
+- On **`Exception`**: **`LogError`** with the exception, then **`ApiServerError` / `ApiServerErrorAction`** (not raw `StatusCode(500, ...)` for generic failures).
+- Map **expected domain failures** (e.g. `InvalidOperationException` with stable messages) to **400 / 409 / 404** with **`ApiResponseDto`** where the codebase already does so — unchanged.
+- Re-throw only if agreed; default is **catch, log, return 500 via helpers**.
+
+### Global middleware
+
+Unhandled exceptions still flow to **`UseGlobalApiExceptionHandler`**, which also uses **`ApiErrorResponseHelper`**. Prefer **catching inside the controller** for actions that already use **`try/catch`**, so the same JSON shape applies consistently.
 
 ## Services
 
@@ -41,47 +81,54 @@ Applies to `Apartment_API/Apartment_API/`. When adding or changing API code, fol
 - **`Database/`** — data access or in-memory stores.
 - **`Helpers/`** — mappers, e.g. `MappingExtensions` entity → DTO.
 - **`Validators/`** — validation helpers for DTOs.
-- **`Configuration/`** — cross-cutting config (e.g. Swagger + versioning).
-- **`Controllers/`** — thin: validate input, call services, build **`ApiResponseDto`**, error handling.
+- **`Configuration/`** — cross-cutting config (e.g. **`ControllerServerErrorExtensions`**, **`ApiErrorResponseHelper`**, Swagger + versioning).
+- **`Controllers/`** — thin: validate input, call services, build **`ApiResponseDto`**, error handling via helpers above.
 
 ## Checklist (before finishing a new/changed endpoint)
 
-- [ ] Return type is `ActionResult<ApiResponseDto<...>>` (or `Task<...>`).
-- [ ] Success and error paths both use **`ApiResponseDto`**.
-- [ ] `try/catch` in controller with logging on failure.
+- [ ] Return type is `ActionResult<ApiResponseDto<...>>` (or `Task<...>` / `IActionResult` where appropriate).
+- [ ] Success and error paths both use **`ApiResponseDto`** where a JSON body is returned.
+- [ ] **`try/catch`** in controller with **`LogError`** on unexpected failure.
+- [ ] Unexpected failures use **`ApiServerError`** or **`ApiServerErrorAction`** — **not** manual generic 500 payloads.
+- [ ] Controller injects **`IWebHostEnvironment`** and **`IConfiguration`** if it handles 500 from exceptions.
 - [ ] Service registered if new; versioning attributes/routes if new controller.
 - [ ] Swagger/`ProducesResponseType` updated if the contract changed.
 
 ## Minimal controller shape (reference)
 
 ```csharp
-[HttpGet]
-[ProducesResponseType(typeof(ApiResponseDto<IReadOnlyCollection<ApartmentDto>>), StatusCodes.Status200OK)]
-[ProducesResponseType(typeof(ApiResponseDto<IReadOnlyCollection<ApartmentDto>>), StatusCodes.Status500InternalServerError)]
-public async Task<ActionResult<ApiResponseDto<IReadOnlyCollection<ApartmentDto>>>> GetAll(CancellationToken ct)
+public sealed class ExampleController(
+    IExampleService service,
+    ILogger<ExampleController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
-    try
+    [HttpGet]
+    [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<ExampleDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<ExampleDto>>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<IReadOnlyList<ExampleDto>>>> GetList(CancellationToken ct)
     {
-        var data = await _service.GetAllAsync(ct);
-        return Ok(new ApiResponseDto<IReadOnlyCollection<ApartmentDto>>
+        try
         {
-            Success = true,
-            Message = "...",
-            Data = data
-        });
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "...");
-        return StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<IReadOnlyCollection<ApartmentDto>>
+            var data = await service.ListAsync(ct);
+            return Ok(new ApiResponseDto<IReadOnlyList<ExampleDto>>
             {
-                Success = false,
-                Message = "An unexpected error occurred.",
-                Errors = ["INTERNAL_SERVER_ERROR"]
+                Success = true,
+                Message = "Loaded.",
+                Data = data
             });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "GetList example.");
+            return this.ApiServerError<IReadOnlyList<ExampleDto>>(environment, configuration, ex);
+        }
     }
 }
 ```
 
-For deeper stack-specific rules, prefer matching existing controllers (e.g. `ApartmentsController`) and `Program.cs` in this repo.
+For **`Task<IActionResult>`** actions (e.g. `Update` returning `NoContent()`), replace the catch return with:
+
+`return this.ApiServerErrorAction<object?>(environment, configuration, ex);`
+
+For deeper stack-specific rules, prefer matching **`AmenitiesController`**, **`ApartmentsController`**, **`Configuration/ControllerServerErrorExtensions.cs`**, **`Configuration/ApiErrorResponseHelper.cs`**, and **`Program.cs`** in this repo.

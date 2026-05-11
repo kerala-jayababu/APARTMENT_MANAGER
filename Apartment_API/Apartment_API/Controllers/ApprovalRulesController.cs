@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -13,7 +15,9 @@ namespace Apartment_API.Controllers;
 [Route("api/v{version:apiVersion}/approval-rules")]
 public sealed class ApprovalRulesController(
     IApprovalRuleService service,
-    ILogger<ApprovalRulesController> logger) : ControllerBase
+    ILogger<ApprovalRulesController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<IReadOnlyList<ApprovalRuleDto>>), StatusCodes.Status200OK)]
@@ -33,7 +37,7 @@ public sealed class ApprovalRulesController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Get approval rules.");
-            return ServerError<IReadOnlyList<ApprovalRuleDto>>();
+            return this.ApiServerError<IReadOnlyList<ApprovalRuleDto>>(environment, configuration, ex);
         }
     }
 
@@ -68,11 +72,7 @@ public sealed class ApprovalRulesController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update approval rule {Id}.", id);
-            return ServerError<string>();
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

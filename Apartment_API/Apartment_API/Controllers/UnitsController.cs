@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -16,7 +18,9 @@ public sealed class UnitsController(
     IOwnershipTransferResidentService ownership,
     IMmcService mmc,
     ICurrentUser currentUser,
-    ILogger<UnitsController> logger) : ControllerBase
+    ILogger<UnitsController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<UnitListDto>>), StatusCodes.Status200OK)]
@@ -40,7 +44,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetList units.");
-            return ServerError<PagedResult<UnitListDto>>();
+            return this.ApiServerError<PagedResult<UnitListDto>>(environment, configuration, ex);
         }
     }
 
@@ -60,7 +64,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetOccupancy.");
-            return ServerError<IReadOnlyList<BlockOccupancyDto>>();
+            return this.ApiServerError<IReadOnlyList<BlockOccupancyDto>>(environment, configuration, ex);
         }
     }
 
@@ -84,7 +88,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetStatusHistory.");
-            return ServerError<PagedResult<UnitStatusHistoryDto>>();
+            return this.ApiServerError<PagedResult<UnitStatusHistoryDto>>(environment, configuration, ex);
         }
     }
 
@@ -111,7 +115,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "BulkGenerate.");
-            return ServerError<BulkGenerateResultDto>();
+            return this.ApiServerError<BulkGenerateResultDto>(environment, configuration, ex);
         }
     }
 
@@ -131,7 +135,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetStatusHistoryForUnit {Id}.", id);
-            return ServerError<IReadOnlyList<UnitStatusHistoryDto>>();
+            return this.ApiServerError<IReadOnlyList<UnitStatusHistoryDto>>(environment, configuration, ex);
         }
     }
 
@@ -151,7 +155,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetOwnershipHistory {Id}.", id);
-            return ServerError<IReadOnlyList<OwnershipHistoryItemDto>>();
+            return this.ApiServerError<IReadOnlyList<OwnershipHistoryItemDto>>(environment, configuration, ex);
         }
     }
 
@@ -171,7 +175,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetMmcHistory {Id}.", id);
-            return ServerError<IReadOnlyList<UnitMmcHistoryDto>>();
+            return this.ApiServerError<IReadOnlyList<UnitMmcHistoryDto>>(environment, configuration, ex);
         }
     }
 
@@ -199,7 +203,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "ChangeStatus {Id}.", id);
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -222,7 +226,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById unit {Id}.", id);
-            return ServerError<UnitDetailDto>();
+            return this.ApiServerError<UnitDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -249,7 +253,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create unit.");
-            return ServerError<IdResultDto>();
+            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
         }
     }
 
@@ -276,7 +280,7 @@ public sealed class UnitsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update unit {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -287,14 +291,5 @@ public sealed class UnitsController(
                 Success = false,
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
-            });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T>
-            {
-                Success = false,
-                Message = "An unexpected error occurred.",
-                Errors = ["INTERNAL_SERVER_ERROR"]
             });
 }

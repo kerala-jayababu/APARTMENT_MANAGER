@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class CoownersController(
     ICoOwnerResidentService service,
     ICurrentUser currentUser,
-    ILogger<CoownersController> logger) : ControllerBase
+    ILogger<CoownersController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponseDto<PagedResult<CoOwnerListDto>>), StatusCodes.Status200OK)]
@@ -37,7 +41,7 @@ public sealed class CoownersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetList coowners.");
-            return ServerError<PagedResult<CoOwnerListDto>>();
+            return this.ApiServerError<PagedResult<CoOwnerListDto>>(environment, configuration, ex);
         }
     }
 
@@ -60,7 +64,7 @@ public sealed class CoownersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "GetById coowner {Id}.", id);
-            return ServerError<OwnerDetailDto>();
+            return this.ApiServerError<OwnerDetailDto>(environment, configuration, ex);
         }
     }
 
@@ -87,7 +91,7 @@ public sealed class CoownersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Create coowner.");
-            return ServerError<CoOwnerCreatedDto>();
+            return this.ApiServerError<CoOwnerCreatedDto>(environment, configuration, ex);
         }
     }
 
@@ -114,7 +118,7 @@ public sealed class CoownersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Update coowner {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -134,7 +138,7 @@ public sealed class CoownersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Delete coowner {Id}.", id);
-            return StatusCode(StatusCodes.Status500InternalServerError);
+            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
         }
     }
 
@@ -146,8 +150,4 @@ public sealed class CoownersController(
                 Message = "Apartment context is required. Use a tenant access token with apartment_id.",
                 Errors = ["NO_APARTMENT_CONTEXT"]
             });
-
-    private ActionResult<ApiResponseDto<T>> ServerError<T>() =>
-        StatusCode(StatusCodes.Status500InternalServerError,
-            new ApiResponseDto<T> { Success = false, Message = "An unexpected error occurred.", Errors = ["INTERNAL_SERVER_ERROR"] });
 }

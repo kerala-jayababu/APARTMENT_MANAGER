@@ -3,7 +3,9 @@ using Apartment_API.Configuration;
 using Apartment_API.DTO;
 using Apartment_API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Apartment_API.Controllers;
 
@@ -14,7 +16,9 @@ namespace Apartment_API.Controllers;
 public sealed class ExpenseMastersController(
     IExpenseManagementService service,
     ICurrentUser currentUser,
-    ILogger<ExpenseMastersController> logger) : ControllerBase
+    ILogger<ExpenseMastersController> logger,
+    IWebHostEnvironment environment,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("vendors")]
     public Task<ActionResult<ApiResponseDto<IReadOnlyList<ExpenseSimpleLookupDto>>>> Vendors(
@@ -61,13 +65,7 @@ public sealed class ExpenseMastersController(
         catch (Exception ex)
         {
             logger.LogError(ex, "{LogMessage}", logMessage);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ApiResponseDto<IReadOnlyList<ExpenseSimpleLookupDto>>
-                {
-                    Success = false,
-                    Message = "An unexpected error occurred.",
-                    Errors = ["INTERNAL_SERVER_ERROR"]
-                });
+            return this.ApiServerError<IReadOnlyList<ExpenseSimpleLookupDto>>(environment, configuration, ex);
         }
     }
 }
