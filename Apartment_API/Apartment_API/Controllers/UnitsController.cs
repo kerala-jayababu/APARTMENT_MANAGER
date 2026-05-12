@@ -259,15 +259,24 @@ public sealed class UnitsController(
 
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Update(
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<string>>> Update(
         [FromRoute] int id,
         [FromBody] CreateUnitRequest request,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized();
+            return Unauthorized(new ApiResponseDto<string>
+            {
+                Success = false,
+                Message = "User id is not available in the token.",
+                Errors = ["UNAUTHORIZED"]
+            });
         if (currentUser.IdApartment is not { } apartmentId)
-            return StatusCode(StatusCodes.Status403Forbidden);
+            return ForbiddenNoApartment<string>();
         try
         {
             await units.UpdateUnitAsync(apartmentId, userId, id, request, cancellationToken);
@@ -275,12 +284,17 @@ public sealed class UnitsController(
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new ApiResponseDto<string>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = ["VALIDATION_FAILED"]
+            });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Update unit {Id}.", id);
-            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 

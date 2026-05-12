@@ -95,24 +95,52 @@ public sealed class FamilyMembersController(
 
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Update(
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponseDto<string>), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ApiResponseDto<string>>> Update(
         [FromRoute] int id,
         [FromBody] CreateFamilyMemberRequest request,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized();
+            return Unauthorized(new ApiResponseDto<string>
+            {
+                Success = false,
+                Message = "User id is not available in the token.",
+                Errors = ["UNAUTHORIZED"]
+            });
         if (currentUser.IdApartment is not { } apartmentId)
-            return StatusCode(StatusCodes.Status403Forbidden);
+            return ForbiddenNoApartment<string>();
         try
         {
             await service.UpdateAsync(apartmentId, userId, id, request, cancellationToken);
             return Ok(new ApiResponseDto<string> { Success = true, Message = "Family member updated.", Data = "UPDATED" });
         }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ApiResponseDto<string>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = ["NOT_FOUND"]
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponseDto<string>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = ["VALIDATION_FAILED"]
+            });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Update family member {Id}.", id);
-            return this.ApiServerErrorAction<object?>(environment, configuration, ex);
+            return this.ApiServerError<string>(environment, configuration, ex);
         }
     }
 

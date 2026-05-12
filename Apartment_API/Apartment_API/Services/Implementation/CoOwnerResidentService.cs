@@ -81,10 +81,53 @@ public sealed class CoOwnerResidentService(
             ? await RequireRoleIdAsync(apartmentRoleCode, cancellationToken)
             : 0;
 
+        var phone = request.PhoneNumber.Trim();
+
+        var unitExists = await Db.Units.AnyAsync(
+            u => u.IdUnit == request.UnitId && u.ApartmentId == apartmentId && u.IsActive,
+            cancellationToken);
+        if (!unitExists)
+            throw new InvalidOperationException(
+                $"unitId {request.UnitId} does not exist in this apartment.");
+
+        var primaryOwnerExists = await Db.Persons.AnyAsync(
+            p => p.IdPerson == request.PrimaryOwnerPersonId && p.ApartmentId == apartmentId && p.IsActive,
+            cancellationToken);
+        if (!primaryOwnerExists)
+            throw new InvalidOperationException(
+                $"primaryOwnerPersonId {request.PrimaryOwnerPersonId} does not exist in this apartment.");
+
+        var phoneTaken = await Db.Persons.AnyAsync(
+            p => p.ApartmentId == apartmentId && p.PhoneNumber == phone && p.IsActive,
+            cancellationToken);
+        if (phoneTaken)
+            throw new InvalidOperationException("Phone number already exists in this apartment.");
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var emailTakenInPersons = await Db.Persons.AnyAsync(
+                p => p.ApartmentId == apartmentId && p.Email == email && p.IsActive,
+                cancellationToken);
+            if (emailTakenInPersons)
+                throw new InvalidOperationException("Email already exists in this apartment.");
+        }
+
+        if (request.CreateAppLogin)
+        {
+            var emailTakenInUsers = await Db.Users.AnyAsync(
+                u => u.Email == email, cancellationToken);
+            if (emailTakenInUsers)
+                throw new InvalidOperationException("A login already exists for this email. Please use a different email.");
+
+            var phoneTakenInUsers = await Db.Users.AnyAsync(
+                u => u.PhoneNumber == phone && u.IsActive, cancellationToken);
+            if (phoneTakenInUsers)
+                throw new InvalidOperationException("A login already exists for this phone number. Please use a different phone number.");
+        }
+
         await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var fromDate = (request.OwnershipFromDate ?? now).Date;
-        var phone = request.PhoneNumber.Trim();
 
         var person = new Person
         {

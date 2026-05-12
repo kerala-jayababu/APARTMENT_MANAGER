@@ -171,6 +171,38 @@ public sealed class OwnerResidentService(
         if (phoneTaken)
             throw new InvalidOperationException("Phone number already exists in this apartment.");
 
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var emailTakenInPersons = await Db.Persons.AnyAsync(
+                p => p.ApartmentId == apartmentId && p.Email == email && p.IsActive,
+                cancellationToken);
+            if (emailTakenInPersons)
+                throw new InvalidOperationException("Email already exists in this apartment.");
+        }
+
+        if (request.CreateAppLogin)
+        {
+            var emailTakenInUsers = await Db.Users.AnyAsync(
+                u => u.Email == email, cancellationToken);
+            if (emailTakenInUsers)
+                throw new InvalidOperationException("A login already exists for this email. Please use a different email.");
+
+            var phoneTakenInUsers = await Db.Users.AnyAsync(
+                u => u.PhoneNumber == phone && u.IsActive, cancellationToken);
+            if (phoneTakenInUsers)
+                throw new InvalidOperationException("A login already exists for this phone number. Please use a different phone number.");
+        }
+
+        var unitNumbersById = await Db.Units.AsNoTracking()
+            .Where(u => u.ApartmentId == apartmentId && u.IsActive && unitIds.Contains(u.IdUnit))
+            .ToDictionaryAsync(u => u.IdUnit, u => u.UnitNumber, cancellationToken)
+            .ConfigureAwait(false);
+
+        var missingUnitIds = unitIds.Where(uid => !unitNumbersById.ContainsKey(uid)).ToList();
+        if (missingUnitIds.Count > 0)
+            throw new InvalidOperationException(
+                $"linkedUnitIds contains unit id(s) that do not exist in this apartment: {string.Join(", ", missingUnitIds)}.");
+
         foreach (var uid in unitIds)
         {
             var hasPrimary = await Db.UnitOwners.AnyAsync(
@@ -180,7 +212,12 @@ public sealed class OwnerResidentService(
                    && uo.IsActive,
                 cancellationToken);
             if (hasPrimary)
-                throw new InvalidOperationException($"Unit {uid} already has a primary owner.");
+            {
+                var unitLabel = unitNumbersById.TryGetValue(uid, out var un) && !string.IsNullOrWhiteSpace(un)
+                    ? un
+                    : uid.ToString();
+                throw new InvalidOperationException($"Unit {unitLabel} already has a primary owner.");
+            }
         }
 
         // 3. Persist within a single transaction ─────────────────────────
@@ -256,6 +293,16 @@ public sealed class OwnerResidentService(
                 CreatedBy = userId
             });
             isFirst = false;
+        }
+
+        var unitsToAllocate = await Db.Units
+            .Where(u => u.ApartmentId == apartmentId && unitIds.Contains(u.IdUnit))
+            .ToListAsync(cancellationToken);
+        foreach (var u in unitsToAllocate)
+        {
+            u.IdCurrentOwner = person.IdPerson;
+            u.UpdatedAt = now;
+            u.UpdatedBy = userId;
         }
 
         if (request.Vehicles is { Count: > 0 } vehicles)
@@ -376,6 +423,13 @@ public sealed class OwnerResidentService(
             var have = existing.Select(x => x.UnitId).ToHashSet();
             var toAdd = uids.Where(uid => !have.Contains(uid)).ToList();
 
+            var toAddUnitNumbers = toAdd.Count == 0
+                ? new Dictionary<int, string>()
+                : await Db.Units.AsNoTracking()
+                    .Where(u => u.ApartmentId == apartmentId && toAdd.Contains(u.IdUnit))
+                    .ToDictionaryAsync(u => u.IdUnit, u => u.UnitNumber, cancellationToken)
+                    .ConfigureAwait(false);
+
             foreach (var uid in toAdd)
             {
                 var taken = await Db.UnitOwners.AnyAsync(
@@ -386,7 +440,12 @@ public sealed class OwnerResidentService(
                        && uo.IsActive,
                     cancellationToken);
                 if (taken)
-                    throw new InvalidOperationException($"Unit {uid} already has a primary owner.");
+                {
+                    var unitLabel = toAddUnitNumbers.TryGetValue(uid, out var un) && !string.IsNullOrWhiteSpace(un)
+                        ? un
+                        : uid.ToString();
+                    throw new InvalidOperationException($"Unit {unitLabel} already has a primary owner.");
+                }
             }
 
             // Insert new rows; the very first one becomes primary if no

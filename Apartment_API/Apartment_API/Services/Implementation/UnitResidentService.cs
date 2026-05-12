@@ -154,9 +154,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
     public async Task<int> CreateUnitAsync(
         int apartmentId, int userId, CreateUnitRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.UnitNumber)) throw new InvalidOperationException("UnitNumber is required.");
-        if (request.BuiltUpArea is { } b && request.CarpetArea is { } c && b < c)
-            throw new InvalidOperationException("builtUpArea must be >= carpetArea when both are set.");
+        ValidateUnitWriteRequest(request);
         var st = await db.UnitStatuses.AsNoTracking()
             .FirstOrDefaultAsync(s => s.IdUnitStatus == request.UnitStatusId, cancellationToken)
             .ConfigureAwait(false);
@@ -227,6 +225,23 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         return unit.IdUnit;
     }
 
+    private const int FloorMin = 0;
+    private const int FloorMax = 200;
+
+    private static void ValidateUnitWriteRequest(CreateUnitRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.UnitNumber))
+            throw new InvalidOperationException("UnitNumber is required.");
+        if (request.Floor < FloorMin || request.Floor > FloorMax)
+            throw new InvalidOperationException($"floor must be between {FloorMin} and {FloorMax}.");
+        if (request.CarpetArea is { } ca && ca < 0)
+            throw new InvalidOperationException("carpetArea must be >= 0.");
+        if (request.BuiltUpArea is { } ba && ba < 0)
+            throw new InvalidOperationException("builtUpArea must be >= 0.");
+        if (request.BuiltUpArea is { } b && request.CarpetArea is { } c && b < c)
+            throw new InvalidOperationException("builtUpArea must be >= carpetArea when both are set.");
+    }
+
     private async Task ValidatePrimaryOwnerForUnitAsync(
         int apartmentId, int personId, CancellationToken cancellationToken)
     {
@@ -248,6 +263,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
     public async Task UpdateUnitAsync(
         int apartmentId, int userId, int id, CreateUnitRequest request, CancellationToken cancellationToken = default)
     {
+        ValidateUnitWriteRequest(request);
         var u = await db.Units.FirstOrDefaultAsync(
             x => x.IdUnit == id && x.ApartmentId == apartmentId, cancellationToken).ConfigureAwait(false);
         if (u is null) throw new InvalidOperationException("Unit not found.");

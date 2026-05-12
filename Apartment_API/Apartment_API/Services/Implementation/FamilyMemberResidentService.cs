@@ -85,6 +85,7 @@ public sealed class FamilyMemberResidentService(AppDbContext db, IWebHostEnviron
     public async Task<int> CreateAsync(
         int apartmentId, int userId, CreateFamilyMemberRequest request, CancellationToken cancellationToken = default)
     {
+        await ValidateFamilyMemberRequestAsync(apartmentId, request, cancellationToken);
         var fam = await RequirePersonTypeIdAsync(PersonTypeCodes.FamilyMember, cancellationToken);
         var now = DateTime.UtcNow;
         var p = new Person
@@ -114,7 +115,9 @@ public sealed class FamilyMemberResidentService(AppDbContext db, IWebHostEnviron
         int apartmentId, int userId, int personId, CreateFamilyMemberRequest request, CancellationToken cancellationToken = default)
     {
         var p = await Db.Persons.FirstOrDefaultAsync(x => x.IdPerson == personId && x.ApartmentId == apartmentId, cancellationToken);
-        if (p is null) return;
+        if (p is null) throw new KeyNotFoundException("Family member not found.");
+        await ValidateFamilyMemberRequestAsync(apartmentId, request, cancellationToken);
+        p.ParentOwnerId = request.ParentPersonId;
         p.FullName = request.FullName.Trim();
         p.PhoneNumber = request.ContactNumber ?? p.PhoneNumber;
         p.Relationship = request.Relationship;
@@ -124,6 +127,43 @@ public sealed class FamilyMemberResidentService(AppDbContext db, IWebHostEnviron
         p.UpdatedAt = DateTime.UtcNow;
         p.UpdatedBy = userId;
         await Db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task ValidateFamilyMemberRequestAsync(
+        int apartmentId, CreateFamilyMemberRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FullName))
+            throw new InvalidOperationException("fullName is required.");
+        if (request.Age is { } age && (age < 0 || age > 120))
+            throw new InvalidOperationException("age must be between 0 and 120.");
+
+        if (request.UnitId <= 0)
+            throw new InvalidOperationException("unitId is required.");
+        var unitExists = await Db.Units.AnyAsync(
+            u => u.IdUnit == request.UnitId && u.ApartmentId == apartmentId && u.IsActive,
+            cancellationToken);
+        if (!unitExists)
+            throw new InvalidOperationException(
+                $"unitId {request.UnitId} does not exist in this apartment.");
+
+        if (request.ParentPersonId <= 0)
+            throw new InvalidOperationException("parentPersonId is required.");
+        var parentExists = await Db.Persons.AnyAsync(
+            p => p.IdPerson == request.ParentPersonId && p.ApartmentId == apartmentId && p.IsActive,
+            cancellationToken);
+        if (!parentExists)
+            throw new InvalidOperationException(
+                $"parentPersonId {request.ParentPersonId} does not exist in this apartment.");
+
+        var parentLinkedToUnit = await Db.UnitOwners.AnyAsync(
+            uo => uo.ApartmentId == apartmentId
+               && uo.UnitId == request.UnitId
+               && uo.PersonId == request.ParentPersonId
+               && uo.IsActive,
+            cancellationToken);
+        if (!parentLinkedToUnit)
+            throw new InvalidOperationException(
+                $"parentPersonId {request.ParentPersonId} is not linked to unitId {request.UnitId}.");
     }
 
     public async Task DeleteAsync(
