@@ -180,30 +180,38 @@ public sealed class UnitsController(
     }
 
     [HttpPost("{id:int}/status")]
-    [ProducesResponseType(typeof(ApiResponseDto<IdResultDto>), StatusCodes.Status201Created)]
-    public async Task<ActionResult<ApiResponseDto<IdResultDto>>> ChangeStatus(
+    [ProducesResponseType(typeof(ApiResponseDto<ChangeUnitStatusResultDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponseDto<ChangeUnitStatusResultDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponseDto<ChangeUnitStatusResultDto>>> ChangeStatus(
         [FromRoute] int id,
         [FromBody] ChangeUnitStatusRequest request,
         CancellationToken cancellationToken = default)
     {
         if (currentUser.IdUser is not { } userId)
-            return Unauthorized(new ApiResponseDto<IdResultDto> { Success = false, Message = "User id is not available in the token." });
+            return Unauthorized(new ApiResponseDto<ChangeUnitStatusResultDto> { Success = false, Message = "User id is not available in the token." });
         if (currentUser.IdApartment is not { } apartmentId)
-            return ForbiddenNoApartment<IdResultDto>();
+            return ForbiddenNoApartment<ChangeUnitStatusResultDto>();
         try
         {
-            var historyId = await units.ChangeStatusAsync(apartmentId, userId, id, request, cancellationToken);
-            return StatusCode(StatusCodes.Status201Created,
-                new ApiResponseDto<IdResultDto> { Success = true, Message = "Status changed.", Data = new IdResultDto { Id = historyId } });
+            var result = await units.ChangeStatusAsync(apartmentId, userId, id, request, cancellationToken);
+            var body = new ApiResponseDto<ChangeUnitStatusResultDto>
+            {
+                Success = true,
+                Message = result.CreatedNew ? "Status changed." : "Duplicate request; existing status history updated.",
+                Data = result
+            };
+            return result.CreatedNew
+                ? StatusCode(StatusCodes.Status201Created, body)
+                : Ok(body);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ApiResponseDto<IdResultDto> { Success = false, Message = ex.Message });
+            return BadRequest(new ApiResponseDto<ChangeUnitStatusResultDto> { Success = false, Message = ex.Message });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "ChangeStatus {Id}.", id);
-            return this.ApiServerError<IdResultDto>(environment, configuration, ex);
+            return this.ApiServerError<ChangeUnitStatusResultDto>(environment, configuration, ex);
         }
     }
 
