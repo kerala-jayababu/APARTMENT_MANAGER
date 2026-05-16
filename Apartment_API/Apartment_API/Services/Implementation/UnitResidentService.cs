@@ -249,20 +249,32 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             from p in db.Persons.AsNoTracking()
             where p.IdPerson == personId && p.ApartmentId == apartmentId && p.IsActive
             join t in db.PersonTypes.AsNoTracking() on p.PersonTypeId equals t.IdPersonType
-            select new { p.IdPerson, p.FullName, t.PersonTypeCode }
+            select new { p.IdPerson, p.FullName, p.PersonNumber, t.PersonTypeCode, t.PersonTypeName }
         ).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (row is null)
             throw new InvalidOperationException("primaryOwnerPersonId was not found or is inactive in this apartment.");
-        var normalized = (row.PersonTypeCode ?? "").Trim()
-            .Replace("-", "_", StringComparison.Ordinal).ToUpperInvariant();
-        if (normalized is not ("PRIMARY_OWNER" or "CO_OWNER"))
+        var normalized = NormalizePersonTypeCode(row.PersonTypeCode);
+        var isOwnerOrCoOwner = normalized == NormalizePersonTypeCode(PersonTypeCodes.Owner)||normalized == NormalizePersonTypeCode(PersonTypeCodes.PrimaryOwner)
+            || normalized == NormalizePersonTypeCode(PersonTypeCodes.CoOwner);
+        if (!isOwnerOrCoOwner)
         {
-            var displayName = string.IsNullOrWhiteSpace(row.FullName)
-                ? $"Person #{row.IdPerson}"
-                : row.FullName.Trim();
+            var displayName = FormatPersonDisplayName(row.FullName, row.PersonNumber, row.IdPerson);
+            var typeLabel = string.IsNullOrWhiteSpace(row.PersonTypeName)
+                ? row.PersonTypeCode ?? "unknown"
+                : row.PersonTypeName.Trim();
             throw new InvalidOperationException(
-                $"{displayName} must have person type OWNER or CO-OWNER to be set as primary owner.");
+                $"{displayName} ({typeLabel}) must have person type OWNER or CO-OWNER to be set as primary owner.");
         }
+    }
+
+    private static string NormalizePersonTypeCode(string? code) =>
+        (code ?? "").Trim().Replace("-", "_", StringComparison.Ordinal).ToUpperInvariant();
+
+    private static string FormatPersonDisplayName(string? fullName, string? personNumber, int idPerson)
+    {
+        if (!string.IsNullOrWhiteSpace(fullName)) return fullName.Trim();
+        if (!string.IsNullOrWhiteSpace(personNumber)) return personNumber.Trim();
+        return $"Person #{idPerson}";
     }
 
     public async Task UpdateUnitAsync(
@@ -382,6 +394,9 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             throw new InvalidOperationException("Reason is required and must be 300 characters or less.");
         var trimmedReason = request.Reason.Trim();
         var effectiveDate = request.EffectiveDate.Date;
+
+        if (request.LinkedPersonId is <= 0)
+            throw new InvalidOperationException("linkedPersonId must be a positive person id when provided.");
         int? linkedPersonId = request.LinkedPersonId is > 0 ? request.LinkedPersonId : null;
 
         var newStatusExists = await db.UnitStatuses.AsNoTracking()
@@ -389,44 +404,48 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         if (!newStatusExists)
             throw new InvalidOperationException("newStatusId is not a valid unit status.");
 
-        if (linkedPersonId is { } pid)
-        {
-            var personOk = await db.Persons.AsNoTracking()
-                .AnyAsync(p => p.IdPerson == pid && p.ApartmentId == apartmentId && p.IsActive, cancellationToken)
-                .ConfigureAwait(false);
-            if (!personOk)
-                throw new InvalidOperationException("linkedPersonId was not found, is inactive, or does not belong to this apartment.");
-        }
-
         var u = await db.Units.FirstOrDefaultAsync(
             x => x.IdUnit == unitId && x.ApartmentId == apartmentId, cancellationToken).ConfigureAwait(false);
         if (u is null) throw new InvalidOperationException("Unit not found.");
+
+        if (linkedPersonId is { } pid)
+            await ValidateLinkedPersonForUnitStatusAsync(apartmentId, unitId, pid, cancellationToken)
+                .ConfigureAwait(false);
+
         var prev = u.UnitStatusId;
         var now = DateTime.UtcNow;
 
-        if (prev == request.NewStatusId)
-        {
-            var latest = await db.UnitStatusHistory
-                .Where(h => h.ApartmentId == apartmentId && h.UnitId == unitId)
-                .OrderByDescending(h => h.ChangedAt)
-                .ThenByDescending(h => h.IdUnitStatusHistory)
-                .FirstOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (latest is not null
-                && latest.NewStatusId == request.NewStatusId
-                && latest.EffectiveDate == effectiveDate
-                && latest.LinkedPersonId == linkedPersonId
-                && string.Equals(latest.Reason, trimmedReason, StringComparison.Ordinal))
-            {
-                latest.ChangedAt = now;
-                latest.ChangedByUserId = userId;
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return new ChangeUnitStatusResultDto { Id = latest.IdUnitStatusHistory, CreatedNew = false };
-            }
+        var latest = await db.UnitStatusHistory
+            .Where(h => h.ApartmentId == apartmentId && h.UnitId == unitId)
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.IdUnitStatusHistory)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-            throw new InvalidOperationException(
-                "The unit already has the selected status. Resubmit only matches the latest history row when effectiveDate, linkedPersonId, and reason are unchanged.");
+        var canRefreshLatest = latest is not null
+            && latest.NewStatusId == request.NewStatusId
+            && (latest.PreviousStatusId == prev || prev == request.NewStatusId);
+
+        if (canRefreshLatest)
+        {
+            latest!.EffectiveDate = effectiveDate;
+            latest.LinkedPersonId = linkedPersonId;
+            latest.Reason = trimmedReason;
+            latest.ChangedAt = now;
+            latest.ChangedByUserId = userId;
+            if (u.UnitStatusId != request.NewStatusId)
+            {
+                u.UnitStatusId = request.NewStatusId;
+                u.UpdatedAt = now;
+                u.UpdatedBy = userId;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new ChangeUnitStatusResultDto { Id = latest.IdUnitStatusHistory, CreatedNew = false };
         }
+
+        if (prev == request.NewStatusId)
+            throw new InvalidOperationException(
+                "The unit already has the selected status and there is no matching status history row to update.");
 
         u.UnitStatusId = request.NewStatusId;
         u.UpdatedAt = now;
@@ -446,6 +465,39 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         db.UnitStatusHistory.Add(h);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new ChangeUnitStatusResultDto { Id = h.IdUnitStatusHistory, CreatedNew = true };
+    }
+
+    private async Task ValidateLinkedPersonForUnitStatusAsync(
+        int apartmentId, int unitId, int personId, CancellationToken cancellationToken)
+    {
+        var person = await db.Persons.AsNoTracking()
+            .Where(p => p.IdPerson == personId && p.ApartmentId == apartmentId)
+            .Select(p => new { p.FullName, p.PersonNumber, p.IsActive })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (person is null)
+            throw new InvalidOperationException(
+                $"linkedPersonId {personId} does not exist in this apartment.");
+        if (!person.IsActive)
+        {
+            var inactiveName = FormatPersonDisplayName(person.FullName, person.PersonNumber, personId);
+            throw new InvalidOperationException($"{inactiveName} is inactive and cannot be linked to a status change.");
+        }
+
+        var linkedToUnit = await db.UnitOwners.AsNoTracking().AnyAsync(
+                uo => uo.ApartmentId == apartmentId && uo.UnitId == unitId && uo.PersonId == personId && uo.IsActive,
+                cancellationToken)
+            .ConfigureAwait(false)
+            || await db.TenantAssignments.AsNoTracking().AnyAsync(
+                ta => ta.ApartmentId == apartmentId && ta.UnitId == unitId && ta.PersonId == personId && ta.IsActive,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!linkedToUnit)
+        {
+            var displayName = FormatPersonDisplayName(person.FullName, person.PersonNumber, personId);
+            throw new InvalidOperationException(
+                $"{displayName} is not an active owner or tenant of this unit.");
+        }
     }
 
     public async Task<PagedResult<UnitStatusHistoryDto>> GetStatusHistoryAsync(

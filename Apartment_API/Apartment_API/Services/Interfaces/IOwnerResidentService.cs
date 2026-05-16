@@ -10,6 +10,6 @@ public interface IOwnerResidentService
     Task<int> CreateAsync(int apartmentId, int userId, CreateOwnerRequest request, CancellationToken cancellationToken = default);
     Task UpdateAsync(int apartmentId, int userId, int personId, CreateOwnerRequest request, CancellationToken cancellationToken = default);
     Task<IdProofResultDto> UploadIdProofAsync(
-        int apartmentId, int userId, int personId, Stream fileStream, string fileName, string? documentCategoryCode,
+        int apartmentId, int userId, int personId, Stream fileStream, string fileName, int documentCategoryId,
         CancellationToken cancellationToken = default);
 }

@@ -197,7 +197,7 @@ public sealed class UnitsController(
             var body = new ApiResponseDto<ChangeUnitStatusResultDto>
             {
                 Success = true,
-                Message = result.CreatedNew ? "Status changed." : "Duplicate request; existing status history updated.",
+                Message = result.CreatedNew ? "Status changed." : "Status history updated.",
                 Data = result
             };
             return result.CreatedNew

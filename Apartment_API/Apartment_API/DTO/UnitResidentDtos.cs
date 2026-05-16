@@ -112,7 +112,7 @@ public sealed class ChangeUnitStatusRequest
     public string Reason { get; set; } = string.Empty;
 }
 
-/// <summary>POST /units/{id}/status — <see cref="CreatedNew"/> is false when the same request was applied again and the latest history row was refreshed.</summary>
+/// <summary>POST /units/{id}/status — <see cref="CreatedNew"/> is false when the latest history row for the same transition was updated instead of inserting a duplicate.</summary>
 public sealed class ChangeUnitStatusResultDto
 {
     public int Id { get; init; }

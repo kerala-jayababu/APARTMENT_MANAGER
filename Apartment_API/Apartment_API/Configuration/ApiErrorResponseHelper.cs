@@ -1,6 +1,7 @@
 using Apartment_API.DTO;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
@@ -14,18 +15,34 @@ public static class ApiErrorResponseHelper
     public const string ExposeExceptionDetailsKey = "Api:ExposeExceptionDetails";
 
     public static bool ShouldExposeDetails(IWebHostEnvironment env, IConfiguration config) =>
-        config.GetValue(ExposeExceptionDetailsKey, false) || env.IsDevelopment();
+        config.GetValue(ExposeExceptionDetailsKey, defaultValue: true);
 
     public static (string Message, IReadOnlyList<string> Errors) FormatException(
         Exception? ex, IWebHostEnvironment env, IConfiguration config)
     {
         if (ex is null)
             return ("An unexpected error occurred.", ["INTERNAL_SERVER_ERROR"]);
+
+        if (FindSqlException(ex) is { } sqlEx)
+        {
+            var msg = sqlEx.Message;
+            return (msg, ["INTERNAL_SERVER_ERROR", $"{sqlEx.GetType().Name}: {msg}"]);
+        }
+
         if (!ShouldExposeDetails(env, config))
             return ("An unexpected error occurred.", ["INTERNAL_SERVER_ERROR"]);
         var inner = ex.InnerException is { } i ? $" Inner: {i.Message}" : "";
-        var msg = $"{ex.Message}{inner}";
-        return (msg, ["INTERNAL_SERVER_ERROR", $"{ex.GetType().Name}: {msg}"]);
+        var detail = $"{ex.Message}{inner}";
+        return (detail, ["INTERNAL_SERVER_ERROR", $"{ex.GetType().Name}: {detail}"]);
+    }
+
+    private static SqlException? FindSqlException(Exception ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is SqlException sql) return sql;
+        }
+        return null;
     }
 
     public static async Task WriteJsonAsync(HttpContext context, Exception? ex, IWebHostEnvironment env, IConfiguration config)

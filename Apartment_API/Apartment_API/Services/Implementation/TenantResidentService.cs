@@ -138,6 +138,9 @@ public sealed class TenantResidentService(
             ? await RequireRoleIdAsync(apartmentRoleCode, cancellationToken)
             : 0;
 
+        await ValidateVehicleNumbersAsync(apartmentId, excludePersonId: null, request.Vehicles, cancellationToken)
+            .ConfigureAwait(false);
+
         await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var person = new Person
@@ -253,6 +256,8 @@ public sealed class TenantResidentService(
         ta.UpdatedAt = DateTime.UtcNow;
         ta.UpdatedBy = userId;
         var now = DateTime.UtcNow;
+        await ValidateVehicleNumbersAsync(apartmentId, p.IdPerson, request.Vehicles, cancellationToken)
+            .ConfigureAwait(false);
         var existingV = await Db.Vehicles
             .Where(v => v.ApartmentId == apartmentId && v.PersonId == p.IdPerson)
             .ToListAsync(cancellationToken);

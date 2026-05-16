@@ -13,8 +13,10 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 200);
+        var today = DateTime.UtcNow.Date;
         var q = db.CommitteeTenures.AsNoTracking().Where(t => t.ApartmentId == apartmentId);
-        if (includeArchived == false) q = q.Where(t => t.IsActive);
+        if (includeArchived == false)
+            q = q.Where(t => t.IsActive && t.TenureEndDate >= today);
         var total = await q.CountAsync(cancellationToken);
         var rows = await q
             .OrderByDescending(t => t.IsActive)
@@ -24,7 +26,6 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
             .ToListAsync(cancellationToken);
         if (rows.Count == 0)
             return new PagedResult<CommitteeTenureListDto> { Items = [], TotalCount = total, Page = page, PageSize = pageSize };
-        var today = DateTime.UtcNow.Date;
         var activeStatusId = await helper.GetStatusIdByCodeAsync(Committee.StatusActive, cancellationToken);
         var tenureIds = rows.Select(t => t.IdCommitteeTenure).ToList();
         var (counts, keyNames) = await helper.LoadMemberCountsAndKeyNamesAsync(
@@ -47,8 +48,11 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
 
     public async Task<CommitteeTenureDetailDto?> GetActiveTenureAsync(int apartmentId, CancellationToken cancellationToken = default)
     {
+        var today = DateTime.UtcNow.Date;
         var t = await db.CommitteeTenures.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IsActive, cancellationToken);
+            .Where(x => x.ApartmentId == apartmentId && x.IsActive && x.TenureEndDate >= today)
+            .OrderByDescending(x => x.TenureStartDate)
+            .FirstOrDefaultAsync(cancellationToken);
         if (t is null) return null;
         return await MapToTenureDetailAsync(apartmentId, t, cancellationToken);
     }
@@ -83,7 +87,9 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
     public async Task<int> CreateTenureAsync(
         int apartmentId, int userId, CreateCommitteeTenureRequest request, CancellationToken cancellationToken = default)
     {
-        if (request.TenureEndDate <= request.TenureStartDate) throw new InvalidOperationException("TenureEndDate must be after TenureStartDate.");
+        await EnsureTenureDateRangeValidAsync(
+                apartmentId, request.TenureStartDate, request.TenureEndDate, excludeTenureId: null, cancellationToken)
+            .ConfigureAwait(false);
         var days = (request.TenureEndDate.Date - request.TenureStartDate.Date).TotalDays;
         if (days is < 350 or > 1125) throw new InvalidOperationException("Typical MC tenure is 1–3 years (350–1125 days).");
 
@@ -98,13 +104,15 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
             a.UpdatedAt = now;
             a.UpdatedBy = userId;
         }
+        var start = request.TenureStartDate.Date;
+        var end = request.TenureEndDate.Date;
         var t = new CommitteeTenure
         {
             ApartmentId = apartmentId,
-            TenureStartDate = request.TenureStartDate.Date,
-            TenureEndDate = request.TenureEndDate.Date,
+            TenureStartDate = start,
+            TenureEndDate = end,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes!.Trim(),
-            IsActive = true,
+            IsActive = Committee.IsTenureCurrent(start, end, now.Date),
             CreatedAt = now,
             CreatedBy = userId
         };
@@ -117,15 +125,19 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
     public async Task UpdateTenureAsync(
         int apartmentId, int userId, int id, CreateCommitteeTenureRequest request, CancellationToken cancellationToken = default)
     {
-        if (request.TenureEndDate <= request.TenureStartDate) throw new InvalidOperationException("TenureEndDate must be after TenureStartDate.");
+        await EnsureTenureDateRangeValidAsync(
+                apartmentId, request.TenureStartDate, request.TenureEndDate, excludeTenureId: id, cancellationToken)
+            .ConfigureAwait(false);
         var t = await db.CommitteeTenures
             .FirstOrDefaultAsync(x => x.IdCommitteeTenure == id && x.ApartmentId == apartmentId, cancellationToken);
         if (t is null) throw new InvalidOperationException("Tenure not found.");
-        if (!t.IsActive) throw new InvalidOperationException("Only the active MC tenure can be edited.");
         var now = DateTime.UtcNow;
-        t.TenureStartDate = request.TenureStartDate.Date;
-        t.TenureEndDate = request.TenureEndDate.Date;
+        var start = request.TenureStartDate.Date;
+        var end = request.TenureEndDate.Date;
+        t.TenureStartDate = start;
+        t.TenureEndDate = end;
         t.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes!.Trim();
+        t.IsActive = Committee.IsTenureCurrent(start, end, now.Date);
         t.UpdatedAt = now;
         t.UpdatedBy = userId;
         await db.SaveChangesAsync(cancellationToken);
@@ -141,9 +153,13 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
         if (t is null) throw new InvalidOperationException("Tenure not found.");
         if (!t.IsActive) throw new InvalidOperationException("Only the active MC tenure can be extended.");
         if (request.NewEndDate <= t.TenureEndDate) throw new InvalidOperationException("newEndDate must be after the current end date.");
+        await EnsureTenureDateRangeValidAsync(
+                apartmentId, t.TenureStartDate, request.NewEndDate, excludeTenureId: id, cancellationToken)
+            .ConfigureAwait(false);
         var prev = t.TenureEndDate;
         var now = DateTime.UtcNow;
         t.TenureEndDate = request.NewEndDate.Date;
+        t.IsActive = Committee.IsTenureCurrent(t.TenureStartDate, t.TenureEndDate, now.Date);
         t.UpdatedAt = now;
         t.UpdatedBy = userId;
         db.CommitteeTenureExtensionLogs.Add(new CommitteeTenureExtensionLog
@@ -213,5 +229,30 @@ public sealed class CommitteeTenureService(AppDbContext db, CommitteeDataHelper 
                 ExtendedByName = u != null ? u.FullName : null,
                 ExtendedAt = e.ExtendedAt
             }).ToListAsync(cancellationToken);
+    }
+
+    private async Task EnsureTenureDateRangeValidAsync(
+        int apartmentId,
+        DateTime tenureStartDate,
+        DateTime tenureEndDate,
+        int? excludeTenureId,
+        CancellationToken cancellationToken)
+    {
+        var start = tenureStartDate.Date;
+        var end = tenureEndDate.Date;
+        if (end <= start)
+            throw new InvalidOperationException("tenureEndDate must be after tenureStartDate.");
+
+        var conflicting = await db.CommitteeTenures.AsNoTracking()
+            .Where(t => t.ApartmentId == apartmentId)
+            .Where(t => excludeTenureId == null || t.IdCommitteeTenure != excludeTenureId.Value)
+            .Where(t => t.TenureStartDate <= end && start <= t.TenureEndDate)
+            .Select(t => new { t.TenureStartDate, t.TenureEndDate })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (conflicting is not null)
+            throw new InvalidOperationException(
+                $"The requested tenure dates ({start:yyyy-MM-dd} to {end:yyyy-MM-dd}) overlap an existing tenure ({conflicting.TenureStartDate:yyyy-MM-dd} to {conflicting.TenureEndDate:yyyy-MM-dd}).");
     }
 }

@@ -95,11 +95,17 @@ public sealed class OwnersController(
     public async Task<ActionResult<ApiResponseDto<IdProofResultDto>>> UploadIdProof(
         [FromRoute] int personId,
         IFormFile? file,
-        [FromForm] string? documentCategoryCode,
+        [FromForm] int documentCategoryId,
         CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
             return BadRequest(new ApiResponseDto<IdProofResultDto> { Success = false, Message = "file is required." });
+        if (documentCategoryId <= 0)
+            return BadRequest(new ApiResponseDto<IdProofResultDto>
+            {
+                Success = false,
+                Message = "documentCategoryId is required and must be a positive value (e.g. 2 for Identity Proof)."
+            });
         if (currentUser.IdUser is not { } userId)
             return Unauthorized(new ApiResponseDto<IdProofResultDto> { Success = false, Message = "User id is not available in the token." });
         if (currentUser.IdApartment is not { } apartmentId)
@@ -108,7 +114,7 @@ public sealed class OwnersController(
         {
             await using var stream = file.OpenReadStream();
             var data = await service.UploadIdProofAsync(
-                apartmentId, userId, personId, stream, file.FileName, documentCategoryCode, cancellationToken);
+                apartmentId, userId, personId, stream, file.FileName, documentCategoryId, cancellationToken);
             return Ok(new ApiResponseDto<IdProofResultDto> { Success = true, Message = "ID proof uploaded.", Data = data });
         }
         catch (InvalidOperationException ex)

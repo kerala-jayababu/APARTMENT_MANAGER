@@ -15,11 +15,15 @@ internal static class Committee
     public static string FormatTenureName(CommitteeTenure t) =>
         !string.IsNullOrWhiteSpace(t.Notes) ? t.Notes!.Trim() : $"MC Term {t.TenureStartDate.Year}–{t.TenureEndDate.Year}";
 
-    public static int DaysRemaining(CommitteeTenure t, DateTime today)
-    {
-        if (!t.IsActive) return 0;
-        return Math.Max(0, (t.TenureEndDate.Date - today).Days);
-    }
+    /// <summary>True when today falls within the tenure date range (inclusive).</summary>
+    public static bool IsTenureCurrent(DateTime tenureStartDate, DateTime tenureEndDate, DateTime today) =>
+        tenureStartDate.Date <= today && tenureEndDate.Date >= today;
+
+    public static bool IsTenureCurrent(CommitteeTenure t, DateTime today) =>
+        IsTenureCurrent(t.TenureStartDate, t.TenureEndDate, today);
+
+    public static int DaysRemaining(CommitteeTenure t, DateTime today) =>
+        IsTenureCurrent(t, today) ? Math.Max(0, (t.TenureEndDate.Date - today).Days) : 0;
 
     public static bool IsSingletonRoleCode(string? code) =>
         code is not null && (

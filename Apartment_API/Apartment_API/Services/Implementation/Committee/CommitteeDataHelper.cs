@@ -28,7 +28,7 @@ public sealed class CommitteeDataHelper(AppDbContext db)
     public async Task<int> GetOwnerPersonTypeIdAsync(CancellationToken cancellationToken = default)
     {
         var id = await db.PersonTypes.AsNoTracking()
-            .Where(t => t.IsActive && t.PersonTypeCode.ToUpper() == PersonTypeCodes.Owner.ToUpperInvariant())
+            .Where(t => t.IsActive && t.PersonTypeCode.ToUpper() == PersonTypeCodes.PrimaryOwner.ToUpperInvariant())
             .Select(t => t.IdPersonType)
             .FirstOrDefaultAsync(cancellationToken);
         if (id == 0) throw new InvalidOperationException("OWNER person type is not configured.");

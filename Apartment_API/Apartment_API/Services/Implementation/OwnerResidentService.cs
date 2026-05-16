@@ -220,6 +220,9 @@ public sealed class OwnerResidentService(
             }
         }
 
+        await ValidateVehicleNumbersAsync(apartmentId, excludePersonId: null, request.Vehicles, cancellationToken)
+            .ConfigureAwait(false);
+
         // 3. Persist within a single transaction ─────────────────────────
         await using var tx = await Db.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTime.UtcNow;
@@ -475,16 +478,13 @@ public sealed class OwnerResidentService(
         await tx.CommitAsync(cancellationToken);
     }
     public async Task<IdProofResultDto> UploadIdProofAsync(
-        int apartmentId, int userId, int personId, Stream fileStream, string fileName, string? documentCategoryCode,
+        int apartmentId, int userId, int personId, Stream fileStream, string fileName, int documentCategoryId,
         CancellationToken cancellationToken = default)
     {
         var p = await Db.Persons.FirstOrDefaultAsync(x => x.IdPerson == personId && x.ApartmentId == apartmentId, cancellationToken);
         if (p is null) throw new InvalidOperationException("Person not found.");
-        var catId = await Db.DocumentCategories.AsNoTracking()
-            .Where(c => c.IsActive && (documentCategoryCode == null || c.CategoryCode == documentCategoryCode))
-            .Select(c => c.IdDocumentCategory)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (catId == 0) catId = await Db.DocumentCategories.AsNoTracking().Select(c => c.IdDocumentCategory).FirstAsync(cancellationToken);
+        var catId = await RequireActiveDocumentCategoryIdAsync(documentCategoryId, cancellationToken)
+            .ConfigureAwait(false);
         var url = UploadFile(fileStream, apartmentId, fileName);
         var doc = new StoredDocument
         {
@@ -515,6 +515,9 @@ public sealed class OwnerResidentService(
         DateTime now,
         CancellationToken cancellationToken = default)
     {
+        await ValidateVehicleNumbersAsync(apartmentId, personId, vehicles, cancellationToken)
+            .ConfigureAwait(false);
+
         var existing = await Db.Vehicles
             .Where(ve => ve.ApartmentId == apartmentId && ve.PersonId == personId)
             .ToListAsync(cancellationToken);
