@@ -168,6 +168,15 @@ public sealed class BankAccountsController(
                 return StatusCode(StatusCodes.Status201Created, payload);
             return Ok(payload);
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponseDto<BankAccountDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = ["VALIDATION_FAILED"]
+            });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Save bank account.");

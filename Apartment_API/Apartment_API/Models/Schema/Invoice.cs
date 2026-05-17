@@ -13,7 +13,11 @@ public sealed class Invoice
 
     public int ApartmentId { get; set; }
 
-    [MaxLength(30)]
+    [Required, MaxLength(30)]
+    [Column(TypeName = "varchar(30)")]
+    public string Invoicer { get; set; } = string.Empty;
+
+    [MaxLength(60)]
     public string? InvoiceSource { get; set; }
 
     public int UnitId { get; set; }
@@ -46,6 +50,7 @@ public sealed class Invoice
     public decimal PaidAmount { get; set; }
 
     [Precision(15, 2)]
+    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
     public decimal? BalanceAmount { get; set; }
 
     public int StatusId { get; set; }

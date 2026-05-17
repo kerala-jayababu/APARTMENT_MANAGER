@@ -10,6 +10,7 @@ public sealed class MmcPeriod
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int IdMmcPeriod { get; set; }
 
+    [Column("ApartmentID")]
     public int ApartmentId { get; set; }
 
     [Required, MaxLength(20)]
@@ -17,6 +18,12 @@ public sealed class MmcPeriod
 
     [Required, MaxLength(60)]
     public string PeriodName { get; set; } = string.Empty;
+
+    [Column("MMCPeriodFrom")]
+    public DateTime MmcPeriodFrom { get; set; }
+
+    [Column("MMCPeriodTo")]
+    public DateTime MmcPeriodTo { get; set; }
 
     [Column(TypeName = "date")]
     public DateTime StartDate { get; set; }

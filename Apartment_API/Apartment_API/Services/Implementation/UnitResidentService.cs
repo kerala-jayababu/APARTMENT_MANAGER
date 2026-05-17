@@ -159,13 +159,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             .FirstOrDefaultAsync(s => s.IdUnitStatus == request.UnitStatusId, cancellationToken)
             .ConfigureAwait(false);
         if (st is null) throw new InvalidOperationException("Invalid unitStatusId.");
-        var code = (st.StatusCode ?? "").ToUpperInvariant();
-        var statusName = st.StatusName ?? "";
-        var impliesOwnerOccupancy =
-            code is "OWNED" or "OWN"
-            || (statusName.Contains("own", StringComparison.OrdinalIgnoreCase)
-                && !statusName.Contains("rent", StringComparison.OrdinalIgnoreCase));
-        if (impliesOwnerOccupancy && request.PrimaryOwnerPersonId is null)
+        if (StatusImpliesOwnerOccupancy(st.StatusCode, st.StatusName) && request.PrimaryOwnerPersonId is null)
             throw new InvalidOperationException(
                 "This status requires primaryOwnerPersonId. Renters use tenant flow; vacant units need no owner.");
         if (request.PrimaryOwnerPersonId is { } primaryPersonId)
@@ -174,11 +168,15 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             u => u.ApartmentId == apartmentId && u.UnitNumber == request.UnitNumber.Trim() && u.IsActive,
             cancellationToken).ConfigureAwait(false);
         if (exists) throw new InvalidOperationException("Unit number already exists for this apartment.");
+        Block? block = null;
         if (request.BlockId is { } bId)
         {
-            var ok = await db.Blocks.AnyAsync(
-                b => b.IdBlock == bId && b.ApartmentId == apartmentId && b.IsActive, cancellationToken);
-            if (!ok) throw new InvalidOperationException("Invalid blockId.");
+            block = await db.Blocks.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    b => b.IdBlock == bId && b.ApartmentId == apartmentId && b.IsActive, cancellationToken)
+                .ConfigureAwait(false);
+            if (block is null) throw new InvalidOperationException("Invalid blockId.");
+            ValidateUnitFloorForBlock(request.Floor, block.TotalFloors, block.BlockName);
         }
         var now = DateTime.UtcNow;
         var unit = new Unit
@@ -186,9 +184,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             ApartmentId = apartmentId,
             BlockId = request.BlockId,
             UnitNumber = request.UnitNumber.Trim(),
-            Block = request.BlockId is { } b2
-                ? (await db.Blocks.AsNoTracking().FirstAsync(x => x.IdBlock == b2, cancellationToken)).BlockCode
-                : null,
+            Block = block?.BlockCode,
             Floor = (short)request.Floor,
             UnitTypeId = request.UnitTypeId,
             CarpetArea = request.CarpetArea,
@@ -242,6 +238,51 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             throw new InvalidOperationException("builtUpArea must be >= carpetArea when both are set.");
     }
 
+    private static void ValidateUnitFloorForBlock(int floor, int totalFloors, string? blockName)
+    {
+        if (floor < FloorMin || floor > totalFloors)
+        {
+            var blockLabel = string.IsNullOrWhiteSpace(blockName) ? "this block" : blockName.Trim();
+            throw new InvalidOperationException(
+                $"floor must be between {FloorMin} and {totalFloors} for {blockLabel}.");
+        }
+    }
+
+    // dbo.UnitStatuses master (StatusCode): OCCUPIED, VACANT_OWNED, VACANT_UNOCCUPIED, RENTED, UNDER_RENOVATION, UNSOLD
+    private static string NormalizeUnitStatusCode(string? statusCode) =>
+        (statusCode ?? "").Trim().ToUpperInvariant();
+
+    /// <summary>Statuses where a primary owner must exist on create (see also tenant flow for RENTED).</summary>
+    private static bool StatusImpliesOwnerOccupancy(string? statusCode, string? _) =>
+        NormalizeUnitStatusCode(statusCode) is "OCCUPIED" or "VACANT_OWNED" or "UNDER_RENOVATION";
+
+    /// <summary>Statuses with no current owner — ends UnitOwners and clears IdCurrentOwner on status change.</summary>
+    private static bool StatusClearsPrimaryOwnership(string? statusCode, string? _) =>
+        NormalizeUnitStatusCode(statusCode) is "UNSOLD" or "VACANT_UNOCCUPIED";
+
+    private async Task EndUnitOwnershipForStatusAsync(
+        int apartmentId, int userId, Unit unit, UnitStatus newStatus, DateTime effectiveDate,
+        CancellationToken cancellationToken)
+    {
+        if (!StatusClearsPrimaryOwnership(newStatus.StatusCode, newStatus.StatusName))
+            return;
+
+        var endDate = effectiveDate.Date;
+        var now = DateTime.UtcNow;
+        var owners = await db.UnitOwners
+            .Where(x => x.ApartmentId == apartmentId && x.UnitId == unit.IdUnit && x.IsActive)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var o in owners)
+        {
+            o.IsActive = false;
+            o.OwnershipToDate = endDate;
+            o.UpdatedAt = now;
+            o.UpdatedBy = userId;
+        }
+        unit.IdCurrentOwner = null;
+    }
+
     private async Task ValidatePrimaryOwnerForUnitAsync(
         int apartmentId, int personId, CancellationToken cancellationToken)
     {
@@ -284,6 +325,16 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         var u = await db.Units.FirstOrDefaultAsync(
             x => x.IdUnit == id && x.ApartmentId == apartmentId, cancellationToken).ConfigureAwait(false);
         if (u is null) throw new InvalidOperationException("Unit not found.");
+        Block? block = null;
+        if (request.BlockId is { } bId)
+        {
+            block = await db.Blocks.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    b => b.IdBlock == bId && b.ApartmentId == apartmentId && b.IsActive, cancellationToken)
+                .ConfigureAwait(false);
+            if (block is null) throw new InvalidOperationException("Invalid blockId.");
+            ValidateUnitFloorForBlock(request.Floor, block.TotalFloors, block.BlockName);
+        }
         u.BlockId = request.BlockId;
         u.UnitNumber = request.UnitNumber.Trim();
         u.Floor = (short)request.Floor;
@@ -296,11 +347,7 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         u.IdCurrentOwner = request.PrimaryOwnerPersonId;
         u.UpdatedAt = DateTime.UtcNow;
         u.UpdatedBy = userId;
-        if (request.BlockId is { } b2)
-        {
-            u.Block = (await db.Blocks.AsNoTracking()
-                .FirstAsync(x => x.IdBlock == b2, cancellationToken)).BlockCode;
-        }
+        u.Block = block?.BlockCode;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -399,9 +446,10 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
             throw new InvalidOperationException("linkedPersonId must be a positive person id when provided.");
         int? linkedPersonId = request.LinkedPersonId is > 0 ? request.LinkedPersonId : null;
 
-        var newStatusExists = await db.UnitStatuses.AsNoTracking()
-            .AnyAsync(s => s.IdUnitStatus == request.NewStatusId, cancellationToken).ConfigureAwait(false);
-        if (!newStatusExists)
+        var newStatus = await db.UnitStatuses.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.IdUnitStatus == request.NewStatusId, cancellationToken)
+            .ConfigureAwait(false);
+        if (newStatus is null)
             throw new InvalidOperationException("newStatusId is not a valid unit status.");
 
         var u = await db.Units.FirstOrDefaultAsync(
@@ -439,6 +487,8 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
                 u.UpdatedAt = now;
                 u.UpdatedBy = userId;
             }
+            await EndUnitOwnershipForStatusAsync(apartmentId, userId, u, newStatus, effectiveDate, cancellationToken)
+                .ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new ChangeUnitStatusResultDto { Id = latest.IdUnitStatusHistory, CreatedNew = false };
         }
@@ -450,6 +500,8 @@ public sealed class UnitResidentService(AppDbContext db) : IUnitResidentService
         u.UnitStatusId = request.NewStatusId;
         u.UpdatedAt = now;
         u.UpdatedBy = userId;
+        await EndUnitOwnershipForStatusAsync(apartmentId, userId, u, newStatus, effectiveDate, cancellationToken)
+            .ConfigureAwait(false);
         var h = new UnitStatusHistory
         {
             ApartmentId = apartmentId,

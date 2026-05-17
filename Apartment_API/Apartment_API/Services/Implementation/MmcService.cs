@@ -59,13 +59,17 @@ public sealed class MmcService(AppDbContext db) : IMmcService
             }
         }
 
+        var start = request.StartDate.Date;
+        var end = request.EndDate.Date;
         var row = new MmcPeriod
         {
             ApartmentId = apartmentId,
             PeriodCode = code,
             PeriodName = name,
-            StartDate = request.StartDate.Date,
-            EndDate = request.EndDate.Date,
+            MmcPeriodFrom = start,
+            MmcPeriodTo = end,
+            StartDate = start,
+            EndDate = end,
             IsCurrent = request.IsCurrent,
             IsActive = true,
             CreatedAt = now,
@@ -358,8 +362,8 @@ public sealed class MmcService(AppDbContext db) : IMmcService
         Id = x.IdMmcPeriod,
         PeriodCode = x.PeriodCode,
         PeriodName = x.PeriodName,
-        StartDate = x.StartDate,
-        EndDate = x.EndDate,
+        StartDate = x.StartDate != default ? x.StartDate : x.MmcPeriodFrom.Date,
+        EndDate = x.EndDate != default ? x.EndDate : x.MmcPeriodTo.Date,
         IsCurrent = x.IsCurrent,
         IsActive = x.IsActive
     };

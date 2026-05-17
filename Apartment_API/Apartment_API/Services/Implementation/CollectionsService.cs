@@ -288,9 +288,9 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
                 });
 
                 invoice.PaidAmount += row.AmountPaid.Value;
-                invoice.BalanceAmount = Math.Max(0m, invoice.TotalAmount - invoice.PaidAmount);
-                var newStatus = invoice.BalanceAmount <= 0 ? "PAID" : "PARTIAL";
-                invoice.StatusId = invoice.BalanceAmount <= 0 ? statusPaidId : statusPartialId;
+                var balance = Math.Max(0m, invoice.TotalAmount - invoice.PaidAmount);
+                var newStatus = balance <= 0 ? "PAID" : "PARTIAL";
+                invoice.StatusId = balance <= 0 ? statusPaidId : statusPartialId;
                 invoice.UpdatedAt = now;
                 invoice.UpdatedBy = userId;
 
@@ -401,7 +401,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
         {
             var invoice = invoices.First(x => x.IdInvoice == allocation.InvoiceId);
             invoice.PaidAmount = Math.Max(0m, invoice.PaidAmount - allocation.AllocatedAmount);
-            invoice.BalanceAmount = Math.Max(0m, invoice.TotalAmount - invoice.PaidAmount);
             invoice.StatusId = invoice.PaidAmount <= 0 ? statusUnpaidId : statusPartialId;
             invoice.UpdatedAt = DateTime.UtcNow;
             invoice.UpdatedBy = userId;

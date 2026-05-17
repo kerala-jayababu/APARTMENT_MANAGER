@@ -34,6 +34,14 @@ public sealed class BankAccountService(AppDbContext db) : IBankAccountService
     public async Task<EntitySaveResult<BankAccountDto>?> SaveAsync(
         BankAccountSaveDto dto, int userId, int apartmentId, CancellationToken cancellationToken = default)
     {
+        var accountNumber = dto.AccountNumber.Trim();
+        if (string.IsNullOrEmpty(accountNumber))
+            throw new InvalidOperationException("AccountNumber is required.");
+
+        var excludeId = dto.IdBankAccount > 0 ? dto.IdBankAccount : (int?)null;
+        await EnsureAccountNumberUniqueAsync(apartmentId, accountNumber, excludeId, cancellationToken)
+            .ConfigureAwait(false);
+
         if (dto.IdBankAccount <= 0)
         {
             var e = new BankAccount
@@ -42,7 +50,7 @@ public sealed class BankAccountService(AppDbContext db) : IBankAccountService
                 AccountName = dto.AccountName.Trim(),
                 BankName = dto.BankName.Trim(),
                 BankAccountTypeId = dto.BankAccountTypeId,
-                AccountNumber = dto.AccountNumber.Trim(),
+                AccountNumber = accountNumber,
                 IfscCode = dto.IfscCode.Trim(),
                 BranchName = string.IsNullOrWhiteSpace(dto.BranchName) ? null : dto.BranchName.Trim(),
                 AccountHolderName = dto.AccountHolderName.Trim(),
@@ -70,7 +78,7 @@ public sealed class BankAccountService(AppDbContext db) : IBankAccountService
         existing.AccountName = dto.AccountName.Trim();
         existing.BankName = dto.BankName.Trim();
         existing.BankAccountTypeId = dto.BankAccountTypeId;
-        existing.AccountNumber = dto.AccountNumber.Trim();
+        existing.AccountNumber = accountNumber;
         existing.IfscCode = dto.IfscCode.Trim();
         existing.BranchName = string.IsNullOrWhiteSpace(dto.BranchName) ? null : dto.BranchName.Trim();
         existing.AccountHolderName = dto.AccountHolderName.Trim();
@@ -83,5 +91,26 @@ public sealed class BankAccountService(AppDbContext db) : IBankAccountService
         existing.UpdatedBy = userId;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new EntitySaveResult<BankAccountDto> { Data = existing.ToDto(), Created = false };
+    }
+
+    private async Task EnsureAccountNumberUniqueAsync(
+        int apartmentId,
+        string accountNumber,
+        int? excludeIdBankAccount,
+        CancellationToken cancellationToken)
+    {
+        var normalized = accountNumber.ToUpperInvariant();
+        var q = db.BankAccounts.AsNoTracking()
+            .Where(x => x.ApartmentId == apartmentId && x.IsActive);
+        if (excludeIdBankAccount is { } exclude)
+            q = q.Where(x => x.IdBankAccount != exclude);
+
+        var taken = await q.AnyAsync(
+                x => x.AccountNumber.ToUpper() == normalized,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (taken)
+            throw new InvalidOperationException(
+                "A bank account with this account number already exists in this apartment.");
     }
 }

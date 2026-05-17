@@ -39,12 +39,20 @@ public sealed class IncomeHeadService(AppDbContext db) : IIncomeHeadService
         int apartmentId,
         CancellationToken cancellationToken = default)
     {
+        var headCode = dto.HeadCode.Trim();
+        if (string.IsNullOrEmpty(headCode))
+            throw new InvalidOperationException("HeadCode is required.");
+
+        var excludeId = dto.IdIncomeHead > 0 ? dto.IdIncomeHead : (int?)null;
+        await EnsureHeadCodeUniqueAsync(apartmentId, headCode, excludeId, cancellationToken).ConfigureAwait(false);
+        await EnsureSortOrderUniqueAsync(apartmentId, dto.SortOrder, excludeId, cancellationToken).ConfigureAwait(false);
+
         if (dto.IdIncomeHead <= 0)
         {
             var e = new IncomeHead
             {
                 ApartmentId = apartmentId,
-                HeadCode = dto.HeadCode.Trim(),
+                HeadCode = headCode,
                 HeadName = dto.HeadName.Trim(),
                 IsAutoInvoiced = dto.IsAutoInvoiced,
                 SortOrder = dto.SortOrder,
@@ -67,7 +75,7 @@ public sealed class IncomeHeadService(AppDbContext db) : IIncomeHeadService
         if (existing is null)
             return null;
 
-        existing.HeadCode = dto.HeadCode.Trim();
+        existing.HeadCode = headCode;
         existing.HeadName = dto.HeadName.Trim();
         existing.IsAutoInvoiced = dto.IsAutoInvoiced;
         existing.SortOrder = dto.SortOrder;
@@ -76,5 +84,36 @@ public sealed class IncomeHeadService(AppDbContext db) : IIncomeHeadService
         existing.LedgerAccountId = dto.LedgerAccountId;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new EntitySaveResult<IncomeHeadDto> { Data = existing.ToDto(), Created = false };
+    }
+
+    private static IQueryable<IncomeHead> HeadsForApartment(IQueryable<IncomeHead> q, int apartmentId) =>
+        q.Where(x => x.IsActive && (!x.ApartmentId.HasValue || x.ApartmentId == apartmentId));
+
+    private async Task EnsureHeadCodeUniqueAsync(
+        int apartmentId, string headCode, int? excludeIdIncomeHead, CancellationToken cancellationToken)
+    {
+        var normalized = headCode.ToUpperInvariant();
+        var q = HeadsForApartment(db.IncomeHeads.AsNoTracking(), apartmentId);
+        if (excludeIdIncomeHead is { } exclude)
+            q = q.Where(x => x.IdIncomeHead != exclude);
+
+        var taken = await q.AnyAsync(x => x.HeadCode.ToUpper() == normalized, cancellationToken).ConfigureAwait(false);
+        if (taken)
+            throw new InvalidOperationException(
+                $"An income head with head code '{headCode}' already exists for this apartment.");
+    }
+
+    private async Task EnsureSortOrderUniqueAsync(
+        int apartmentId, byte sortOrder, int? excludeIdIncomeHead, CancellationToken cancellationToken)
+    {
+        var q = HeadsForApartment(db.IncomeHeads.AsNoTracking(), apartmentId)
+            .Where(x => x.SortOrder == sortOrder);
+        if (excludeIdIncomeHead is { } exclude)
+            q = q.Where(x => x.IdIncomeHead != exclude);
+
+        var taken = await q.AnyAsync(cancellationToken).ConfigureAwait(false);
+        if (taken)
+            throw new InvalidOperationException(
+                $"sortOrder {sortOrder} is already used by another active income head in this apartment.");
     }
 }

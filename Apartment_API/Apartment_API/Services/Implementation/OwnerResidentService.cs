@@ -281,7 +281,6 @@ public sealed class OwnerResidentService(
         }
 
         var ownFrom = request.OwnershipFromDate.Date;
-        var isFirst = true;
         foreach (var uid in unitIds)
         {
             Db.UnitOwners.Add(new UnitOwner
@@ -289,24 +288,16 @@ public sealed class OwnerResidentService(
                 ApartmentId = apartmentId,
                 UnitId = uid,
                 PersonId = person.IdPerson,
-                IsPrimaryOwner = isFirst,
+                IsPrimaryOwner = true,
                 OwnershipFromDate = ownFrom,
                 IsActive = true,
                 CreatedAt = now,
                 CreatedBy = userId
             });
-            isFirst = false;
         }
 
-        var unitsToAllocate = await Db.Units
-            .Where(u => u.ApartmentId == apartmentId && unitIds.Contains(u.IdUnit))
-            .ToListAsync(cancellationToken);
-        foreach (var u in unitsToAllocate)
-        {
-            u.IdCurrentOwner = person.IdPerson;
-            u.UpdatedAt = now;
-            u.UpdatedBy = userId;
-        }
+        await SyncUnitsAfterOwnerLinkChangeAsync(apartmentId, userId, unitIds, now, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.Vehicles is { Count: > 0 } vehicles)
         {
@@ -412,15 +403,27 @@ public sealed class OwnerResidentService(
             foreach (var e in existing.Where(e => !uids.Contains(e.UnitId)))
             {
                 e.IsActive = false;
+                e.OwnershipToDate = request.OwnershipFromDate.Date;
                 e.UpdatedAt = now;
                 e.UpdatedBy = userId;
             }
 
-            // The "post-deactivation" view — used to know if a primary still exists
-            var stillActiveAfterDrop = existing
-                .Where(e => uids.Contains(e.UnitId))
-                .ToList();
-            var hasPrimaryAfterDrop = stillActiveAfterDrop.Any(e => e.IsPrimaryOwner);
+            foreach (var link in existing.Where(e => uids.Contains(e.UnitId) && !e.IsPrimaryOwner))
+            {
+                var otherPrimary = await Db.UnitOwners.AnyAsync(
+                    uo => uo.ApartmentId == apartmentId
+                          && uo.UnitId == link.UnitId
+                          && uo.PersonId != personId
+                          && uo.IsPrimaryOwner
+                          && uo.IsActive,
+                    cancellationToken).ConfigureAwait(false);
+                if (!otherPrimary)
+                {
+                    link.IsPrimaryOwner = true;
+                    link.UpdatedAt = now;
+                    link.UpdatedBy = userId;
+                }
+            }
 
             // Pre-check: any newly-added unit must not already have a primary owner
             var have = existing.Select(x => x.UnitId).ToHashSet();
@@ -451,9 +454,6 @@ public sealed class OwnerResidentService(
                 }
             }
 
-            // Insert new rows; the very first one becomes primary if no
-            // primary survives the soft-delete step above.
-            var assignedFirst = hasPrimaryAfterDrop;
             foreach (var uid in toAdd)
             {
                 Db.UnitOwners.Add(new UnitOwner
@@ -461,14 +461,17 @@ public sealed class OwnerResidentService(
                     ApartmentId = apartmentId,
                     UnitId = uid,
                     PersonId = personId,
-                    IsPrimaryOwner = !assignedFirst,
+                    IsPrimaryOwner = true,
                     OwnershipFromDate = request.OwnershipFromDate,
                     IsActive = true,
                     CreatedAt = now,
                     CreatedBy = userId
                 });
-                assignedFirst = true;
             }
+
+            var affectedUnitIds = uids.Union(existing.Select(e => e.UnitId)).ToList();
+            await SyncUnitsAfterOwnerLinkChangeAsync(apartmentId, userId, affectedUnitIds, now, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // 4. Vehicles diff ───────────────────────────────────────────────
@@ -545,4 +548,65 @@ public sealed class OwnerResidentService(
             });
         }
     }
+
+    /// <summary>
+    /// After owner–unit links change: set IdCurrentOwner from active primary row;
+    /// promote UNSOLD / VACANT_UNOCCUPIED to VACANT_OWNED when a primary owner exists.
+    /// </summary>
+    private async Task SyncUnitsAfterOwnerLinkChangeAsync(
+        int apartmentId,
+        int userId,
+        IReadOnlyCollection<int> unitIds,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (unitIds.Count == 0) return;
+
+        var units = await Db.Units
+            .Where(u => u.ApartmentId == apartmentId && unitIds.Contains(u.IdUnit))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (units.Count == 0) return;
+
+        var statusById = await Db.UnitStatuses.AsNoTracking()
+            .ToDictionaryAsync(s => s.IdUnitStatus, s => s.StatusCode, cancellationToken)
+            .ConfigureAwait(false);
+
+        var vacantOwnedStatusId = await Db.UnitStatuses.AsNoTracking()
+            .Where(s => s.IsActive && s.StatusCode == "VACANT_OWNED")
+            .Select(s => s.IdUnitStatus)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var primaryByUnit = await Db.UnitOwners.AsNoTracking()
+            .Where(uo => uo.ApartmentId == apartmentId && unitIds.Contains(uo.UnitId) && uo.IsPrimaryOwner && uo.IsActive)
+            .GroupBy(uo => uo.UnitId)
+            .Select(g => new { UnitId = g.Key, PersonId = g.First().PersonId })
+            .ToDictionaryAsync(x => x.UnitId, x => x.PersonId, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var u in units)
+        {
+            u.UpdatedAt = now;
+            u.UpdatedBy = userId;
+            if (!primaryByUnit.TryGetValue(u.IdUnit, out var ownerPersonId))
+            {
+                if (u.IdCurrentOwner is not null)
+                    u.IdCurrentOwner = null;
+                continue;
+            }
+
+            u.IdCurrentOwner = ownerPersonId;
+            if (vacantOwnedStatusId == 0
+                || !statusById.TryGetValue(u.UnitStatusId, out var code)
+                || !StatusHasNoOwnerAssignment(code))
+                continue;
+
+            u.UnitStatusId = vacantOwnedStatusId;
+        }
+    }
+
+    private static bool StatusHasNoOwnerAssignment(string? statusCode) =>
+        string.Equals(statusCode, "UNSOLD", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statusCode, "VACANT_UNOCCUPIED", StringComparison.OrdinalIgnoreCase);
 }

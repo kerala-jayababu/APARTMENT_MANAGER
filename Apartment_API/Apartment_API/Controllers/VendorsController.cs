@@ -104,18 +104,54 @@ public sealed class VendorsController(
         }
     }
 
-    /// <summary>
-    /// Single save: <c>IdVendor = 0</c> to create, or the existing id to update. <c>ApartmentId</c> is taken from the access token (client value is ignored).
-    /// </summary>
+    /// <summary>Create vendor. Set <c>IdVendor = 0</c> (or omit). <c>ApartmentId</c> is taken from the access token.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiResponseDto<VendorDto>>> Create(
+        [FromBody] VendorSaveDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request.IdVendor > 0)
+        {
+            return BadRequest(new ApiResponseDto<VendorDto>
+            {
+                Success = false,
+                Message = "Use PUT /api/v1/Vendors/{idVendor} to update an existing vendor.",
+                Errors = ["USE_PUT_FOR_UPDATE"]
+            });
+        }
+        return await SaveVendorAsync(request, expectCreate: true, cancellationToken);
+    }
+
+    [HttpPut("{idVendor:int}")]
     [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiResponseDto<VendorDto>), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponseDto<VendorDto>>> Save(
+    public async Task<ActionResult<ApiResponseDto<VendorDto>>> Update(
+        [FromRoute] int idVendor,
         [FromBody] VendorSaveDto request,
+        CancellationToken cancellationToken)
+    {
+        if (idVendor <= 0)
+        {
+            return BadRequest(new ApiResponseDto<VendorDto>
+            {
+                Success = false,
+                Message = "idVendor must be positive."
+            });
+        }
+        request.IdVendor = idVendor;
+        return await SaveVendorAsync(request, expectCreate: false, cancellationToken);
+    }
+
+    private async Task<ActionResult<ApiResponseDto<VendorDto>>> SaveVendorAsync(
+        VendorSaveDto request,
+        bool expectCreate,
         CancellationToken cancellationToken)
     {
         if (currentUser.IdUser is not { } userId)
@@ -158,6 +194,22 @@ public sealed class VendorsController(
                     Message = "Vendor not found for update (check id and apartment)."
                 });
             }
+            if (expectCreate && !result.Created)
+            {
+                return BadRequest(new ApiResponseDto<VendorDto>
+                {
+                    Success = false,
+                    Message = "Vendor was not created. Check IdVendor is 0 for POST."
+                });
+            }
+            if (!expectCreate && result.Created)
+            {
+                return NotFound(new ApiResponseDto<VendorDto>
+                {
+                    Success = false,
+                    Message = "Vendor not found for update (check id and apartment)."
+                });
+            }
             var payload = new ApiResponseDto<VendorDto>
             {
                 Success = true,
@@ -170,7 +222,7 @@ public sealed class VendorsController(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Save vendor.");
+            logger.LogError(ex, expectCreate ? "Create vendor." : "Update vendor {IdVendor}.", request.IdVendor);
             return this.ApiServerError<VendorDto>(environment, configuration, ex);
         }
     }

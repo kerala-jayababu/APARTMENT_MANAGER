@@ -167,6 +167,15 @@ public sealed class ExpenseHeadsController(
                 return StatusCode(StatusCodes.Status201Created, payload);
             return Ok(payload);
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponseDto<ExpenseHeadDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = ["VALIDATION_FAILED"]
+            });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Save expense head.");
