@@ -25,6 +25,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PriorityLevel> PriorityLevels => Set<PriorityLevel>();
     public DbSet<ReconciliationStatus> ReconciliationStatuses => Set<ReconciliationStatus>();
     public DbSet<AppRole> AppRoles => Set<AppRole>();
+    public DbSet<AppModule> AppModules => Set<AppModule>();
+    public DbSet<AppModuleGroup> AppModuleGroups => Set<AppModuleGroup>();
     public DbSet<UnitStatus> UnitStatuses => Set<UnitStatus>();
     public DbSet<UnitType> UnitTypes => Set<UnitType>();
     public DbSet<UtilityType> UtilityTypes => Set<UtilityType>();

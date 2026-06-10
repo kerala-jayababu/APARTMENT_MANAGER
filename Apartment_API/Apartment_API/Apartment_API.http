@@ -1,5 +1,11 @@
 @Apartment_API_HostAddress = http://localhost:5146
 
+# Module RBAC (tenant access token required; SuperAdmin bypasses)
+# Send on every protected /api/ call except /api/v1/auth/*:
+#   X-Module-Code: M02          (required — e.g. M02 units/blocks, M04 owners, M05 committee, M10 collections, M11 expenses)
+#   X-Permission-Action: Approve  (optional — when HTTP method alone is ambiguous; /approve paths infer Approve)
+# GET /api/v1/auth/my-permissions — returns RolePermissions for menu (no X-Module-Code)
+
 ### Request login OTP (email in body)
 POST {{Apartment_API_HostAddress}}/api/v1/Auth/login-otp/request
 Content-Type: application/json
@@ -29,17 +35,36 @@ Authorization: Bearer {{token}}
 # --- Committee (JWT must be tenant/apartment scoped, not bare login token) ---
 @token = REPLACE_WITH_ACCESS_TOKEN_FROM_TENANT_FLOW
 
+### My module permissions (menu / which X-Module-Code to send)
+GET {{Apartment_API_HostAddress}}/api/v1/auth/my-permissions
+Authorization: Bearer {{token}}
+
+### All role permissions for current apartment (no X-Module-Code; optional ?roleId=&moduleCode=)
+GET {{Apartment_API_HostAddress}}/api/v1/role-permissions
+Authorization: Bearer {{token}}
+
+### All modules from dbo.Modules (no X-Module-Code; optional ?isActive=true&moduleGroup=&parentModuleCode=)
+GET {{Apartment_API_HostAddress}}/api/v1/modules
+Authorization: Bearer {{token}}
+
+### All module groups from dbo.modulegroups (no X-Module-Code; optional ?isActive=true)
+GET {{Apartment_API_HostAddress}}/api/v1/module-groups
+Authorization: Bearer {{token}}
+
 ### List MC tenures
 GET {{Apartment_API_HostAddress}}/api/v1/committee-tenures?includeArchived=true&page=1&pageSize=20
 Authorization: Bearer {{token}}
+X-Module-Code: M05
 
 ### Active tenure (detail + embedded members)
 GET {{Apartment_API_HostAddress}}/api/v1/committee-tenures/active
 Authorization: Bearer {{token}}
+X-Module-Code: M05
 
 ### Create tenure (~1–3 years between dates required: 350–1125 days)
 POST {{Apartment_API_HostAddress}}/api/v1/committee-tenures
 Authorization: Bearer {{token}}
+X-Module-Code: M05
 Content-Type: application/json
 
 {
@@ -51,10 +76,12 @@ Content-Type: application/json
 ### List committee members (optional filters)
 GET {{Apartment_API_HostAddress}}/api/v1/committee-members?page=1&pageSize=20
 Authorization: Bearer {{token}}
+X-Module-Code: M05
 
 ### Assign member (replace ids from your DB: tenure, person, role)
 POST {{Apartment_API_HostAddress}}/api/v1/committee-members
 Authorization: Bearer {{token}}
+X-Module-Code: M05
 Content-Type: application/json
 
 {

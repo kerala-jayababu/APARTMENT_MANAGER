@@ -11,15 +11,12 @@ namespace Apartment_API.Services.Implementation;
 
 public sealed class ExpenseManagementService(
     AppDbContext db,
-    ICurrentUser currentUser,
     IWebHostEnvironment env) : IExpenseManagementService
 {
-    private const string ModuleCode = "EXPENSES";
     private static readonly decimal[] AllowedGst = [0m, 5m, 12m, 18m, 28m];
 
     public async Task<ExpenseSummaryDto> GetSummaryAsync(int apartmentId, DateTime? fromDate, DateTime? toDate, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken);
         var (rangeFrom, rangeTo) = await ResolveRangeAsync(apartmentId, fromDate, toDate, cancellationToken);
         var rows = await db.ExpenseBills.AsNoTracking()
             .Where(x => x.ApartmentId == apartmentId && x.BillDate >= rangeFrom && x.BillDate <= rangeTo)
@@ -41,7 +38,6 @@ public sealed class ExpenseManagementService(
     public async Task<PagedResult<ExpenseBillListItemDto>> ListBillsAsync(
         int apartmentId, string? search, int? expenseHeadId, string? statusCode, int? vendorId, DateTime? fromDate, DateTime? toDate, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken);
         var (rangeFrom, rangeTo) = await ResolveRangeAsync(apartmentId, fromDate, toDate, cancellationToken);
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -100,7 +96,6 @@ public sealed class ExpenseManagementService(
 
     public async Task<object?> GetBillAsync(int apartmentId, long billId, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken);
         var bill = await db.ExpenseBills.AsNoTracking().FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IdBill == billId, cancellationToken);
         if (bill is null) return null;
         var vendor = await db.Vendors.AsNoTracking().FirstOrDefaultAsync(x => x.IdVendor == bill.VendorId, cancellationToken);
@@ -186,7 +181,6 @@ public sealed class ExpenseManagementService(
 
     public async Task<ExpenseBillUpsertResponseDto> CreateRegularAsync(int apartmentId, int userId, CreateExpenseBillRequest request, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.Create, cancellationToken);
         ValidateRequest(request);
         var vendorOk = await db.Vendors.AsNoTracking().AnyAsync(x => x.ApartmentId == apartmentId && x.IdVendor == request.VendorId && x.IsActive, cancellationToken);
         if (!vendorOk) throw new InvalidOperationException("VENDOR_NOT_FOUND");
@@ -256,7 +250,6 @@ public sealed class ExpenseManagementService(
 
     public async Task<ExpenseBillUpsertResponseDto> UpdateDraftAsync(int apartmentId, int userId, long billId, CreateExpenseBillRequest request, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.Edit, cancellationToken);
         var bill = await db.ExpenseBills.FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IdBill == billId, cancellationToken);
         if (bill is null) throw new InvalidOperationException("BILL_NOT_FOUND");
         if (bill.Status != "DRAFT") throw new InvalidOperationException("BILL_NOT_EDITABLE");
@@ -311,7 +304,6 @@ public sealed class ExpenseManagementService(
 
     public async Task<ExpenseBillDeleteResponseDto> DeleteDraftAsync(int apartmentId, long billId, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.Delete, cancellationToken);
         var bill = await db.ExpenseBills.FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IdBill == billId, cancellationToken);
         if (bill is null) throw new InvalidOperationException("BILL_NOT_FOUND");
         if (bill.Status != "DRAFT") throw new InvalidOperationException("BILL_NOT_DELETABLE");
@@ -324,7 +316,6 @@ public sealed class ExpenseManagementService(
 
     public async Task<(byte[] Content, string ContentType, string FileName)> DownloadAttachmentAsync(int apartmentId, long billId, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken);
         var bill = await db.ExpenseBills.AsNoTracking().FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IdBill == billId, cancellationToken);
         if (bill is null || string.IsNullOrWhiteSpace(bill.AttachmentFileName)) throw new InvalidOperationException("ATTACHMENT_NOT_FOUND");
         var path = Path.Combine(env.ContentRootPath, "Uploads", "expenses", bill.AttachmentFileName);
@@ -355,7 +346,6 @@ public sealed class ExpenseManagementService(
 
     public async Task<ExpenseBudgetCheckDto> BudgetCheckAsync(int apartmentId, int expenseHeadId, int fiscalYearId, decimal? additionalAmount, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken);
         var budget = await db.Budgets.AsNoTracking()
             .FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.FiscalYearId == fiscalYearId && x.ExpenseHeadId == expenseHeadId && x.IsActive, cancellationToken);
         if (budget is null) throw new InvalidOperationException("Budget not found.");
@@ -449,16 +439,6 @@ public sealed class ExpenseManagementService(
             }).ToListAsync(cancellationToken);
     }
 
-    private async Task EnsurePermissionAsync(int apartmentId, PermissionType p, CancellationToken ct)
-    {
-        if (currentUser.IsSuperAdmin) return;
-        if (currentUser.ApartmentUserRoleId is not { } roleId) throw new UnauthorizedAccessException("FORBIDDEN");
-        var perm = await db.RolePermissions.AsNoTracking().FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.RoleId == roleId && x.ModuleCode == ModuleCode, ct);
-        if (perm == null) throw new UnauthorizedAccessException("FORBIDDEN");
-        var ok = p switch { PermissionType.View => perm.CanView, PermissionType.Create => perm.CanCreate, PermissionType.Edit => perm.CanEdit, PermissionType.Delete => perm.CanDelete, _ => false };
-        if (!ok) throw new UnauthorizedAccessException("FORBIDDEN");
-    }
-
     private async Task<(DateTime From, DateTime To)> ResolveRangeAsync(int apartmentId, DateTime? fromDate, DateTime? toDate, CancellationToken ct)
     {
         var to = (toDate ?? DateTime.UtcNow.Date).Date;
@@ -517,5 +497,4 @@ public sealed class ExpenseManagementService(
     private static string GuessMime(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch { ".pdf" => "application/pdf", ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", _ => "application/octet-stream" };
     private static string Csv(string? s) => string.IsNullOrEmpty(s) ? "" : (s.Contains(',') || s.Contains('"') || s.Contains('\n')) ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
 
-    private enum PermissionType { View, Create, Edit, Delete }
 }

@@ -97,6 +97,10 @@ builder.Services.AddScoped<IOwnershipTransferResidentService, OwnershipTransferR
 builder.Services.AddScoped<CommitteeDataHelper>();
 builder.Services.AddScoped<ICommitteeTenureService, CommitteeTenureService>();
 builder.Services.AddScoped<ICommitteeMemberService, CommitteeMemberService>();
+builder.Services.AddScoped<IModulePermissionService, ModulePermissionService>();
+builder.Services.AddScoped<IRolePermissionService, RolePermissionService>();
+builder.Services.AddScoped<IModuleService, ModuleService>();
+builder.Services.AddScoped<IModuleGroupService, ModuleGroupService>();
 builder.Services
     .AddApiVersioning(options =>
     {
@@ -109,7 +113,10 @@ builder.Services
         options.GroupNameFormat = "'v'VVV";
         options.SubstituteApiVersionInUrl = true;
     });
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.OperationFilter<ModulePermissionHeaderOperationFilter>();
+});
 builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
 
 var app = builder.Build();
@@ -137,6 +144,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseModulePermission();
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
 

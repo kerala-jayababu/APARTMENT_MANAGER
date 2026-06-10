@@ -8,13 +8,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Apartment_API.Services.Implementation;
 
-public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser) : ICollectionsService
+public sealed class CollectionsService(AppDbContext db) : ICollectionsService
 {
-    private const string ModuleCode = "COLLECTIONS";
-
     public async Task<CollectionsSummaryDto> GetSummaryAsync(int apartmentId, string? period, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken).ConfigureAwait(false);
         var (start, end, label) = ResolvePeriod(period);
         var invoices = await db.Invoices.AsNoTracking()
             .Where(x => x.ApartmentId == apartmentId && x.InvoiceDate >= start && x.InvoiceDate < end)
@@ -39,7 +36,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
     public async Task<PagedResult<CollectionInvoiceListItemDto>> ListInvoicesAsync(
         int apartmentId, string? search, string? period, int? incomeHeadId, int? statusId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken).ConfigureAwait(false);
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var q = BaseInvoiceQuery(apartmentId);
@@ -97,7 +93,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
 
     public async Task<CollectionInvoiceDetailDto?> GetInvoiceAsync(int apartmentId, int invoiceId, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken).ConfigureAwait(false);
         var row = await BaseInvoiceQuery(apartmentId)
             .FirstOrDefaultAsync(x => x.i.IdInvoice == invoiceId, cancellationToken)
             .ConfigureAwait(false);
@@ -173,7 +168,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
     public async Task<IReadOnlyList<QuickPostPendingItemDto>> GetQuickPostPendingAsync(
         int apartmentId, string? search, int? unitId, DateTime? fromDate, int? incomeHeadId, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.Create, cancellationToken).ConfigureAwait(false);
         var allowed = await db.InvoiceStatuses.AsNoTracking()
             .Where(x => x.IsActive && (x.StatusCode == "UNPAID" || x.StatusCode == "PARTIAL" || x.StatusCode == "OVERDUE"))
             .Select(x => x.IdInvoiceStatus).ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -213,7 +207,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
     public async Task<SaveQuickPostReceiptsResponseDto> SaveQuickPostReceiptsAsync(
         int apartmentId, int userId, SaveQuickPostReceiptsRequest request, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.Create, cancellationToken).ConfigureAwait(false);
         if (request.ApartmentId != apartmentId) throw new InvalidOperationException("Apartment mismatch.");
         if (request.Receipts.Count == 0) throw new InvalidOperationException("At least one receipt row is required.");
         if (request.Receipts.Count > 50) throw new InvalidOperationException("Maximum 50 rows allowed.");
@@ -329,7 +322,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
 
     public async Task<ReceiptDetailDto?> GetReceiptAsync(int apartmentId, long receiptId, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.View, cancellationToken).ConfigureAwait(false);
         var receipt = await db.PaymentReceipts.AsNoTracking()
             .FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IdPaymentReceipt == receiptId, cancellationToken)
             .ConfigureAwait(false);
@@ -377,7 +369,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
     public async Task<CancelReceiptResponseDto> CancelReceiptAsync(
         int apartmentId, int userId, long receiptId, CancelReceiptRequest request, CancellationToken cancellationToken = default)
     {
-        await EnsurePermissionAsync(apartmentId, PermissionType.Delete, cancellationToken).ConfigureAwait(false);
         var receipt = await db.PaymentReceipts
             .FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.IdPaymentReceipt == receiptId, cancellationToken)
             .ConfigureAwait(false);
@@ -533,28 +524,6 @@ public sealed class CollectionsService(AppDbContext db, ICurrentUser currentUser
         if (!string.IsNullOrWhiteSpace(row.Remarks) && row.Remarks.Trim().Length > 100)
             throw new InvalidOperationException("remarks can be at most 100 chars.");
     }
-
-    private async Task EnsurePermissionAsync(int apartmentId, PermissionType permission, CancellationToken cancellationToken)
-    {
-        if (currentUser.IsSuperAdmin) return;
-        var roleId = currentUser.ApartmentUserRoleId;
-        if (roleId is null) throw new UnauthorizedAccessException("FORBIDDEN");
-        var perm = await db.RolePermissions.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.ApartmentId == apartmentId && x.RoleId == roleId.Value && x.ModuleCode == ModuleCode, cancellationToken)
-            .ConfigureAwait(false);
-        if (perm is null) throw new UnauthorizedAccessException("FORBIDDEN");
-        var ok = permission switch
-        {
-            PermissionType.View => perm.CanView,
-            PermissionType.Create => perm.CanCreate,
-            PermissionType.Edit => perm.CanEdit,
-            PermissionType.Delete => perm.CanDelete,
-            _ => false
-        };
-        if (!ok) throw new UnauthorizedAccessException("FORBIDDEN");
-    }
-
-    private enum PermissionType { View, Create, Edit, Delete }
 
     private sealed class InvoiceJoinRow
     {

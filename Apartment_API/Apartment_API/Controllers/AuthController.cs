@@ -18,6 +18,7 @@ public sealed class AuthController(
     IJwtTokenService jwtTokenService,
     IOtpAuthService otpAuthService,
     IApartmentAuthService apartmentAuthService,
+    IModulePermissionService modulePermissionService,
     ICurrentUser currentUser,
     ILogger<AuthController> logger,
     IWebHostEnvironment environment,
@@ -50,6 +51,53 @@ public sealed class AuthController(
                 Email = currentUser.Email ?? string.Empty,
                 PhoneNumber = string.IsNullOrEmpty(currentUser.PhoneNumber) ? null : currentUser.PhoneNumber,
                 IsSuperAdmin = currentUser.IsSuperAdmin
+            }
+        });
+    }
+
+    /// <summary>Module permissions for the current apartment role (menu / X-Module-Code).</summary>
+    [HttpGet("my-permissions")]
+    [Authorize(Policy = AuthorizationPolicies.ApiAccess)]
+    [ProducesResponseType(typeof(ApiResponseDto<MyModulePermissionsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponseDto<MyModulePermissionsDto>), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiResponseDto<MyModulePermissionsDto>>> GetMyPermissions(
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.IdApartment is not { } apartmentId || currentUser.ApartmentUserRoleId is not { } roleId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ApiResponseDto<MyModulePermissionsDto>
+            {
+                Success = false,
+                Message = "Apartment context is required. Use a tenant access token with apartment_id.",
+                Errors = ["NO_APARTMENT_CONTEXT"]
+            });
+        }
+
+        if (currentUser.IsSuperAdmin)
+        {
+            return Ok(new ApiResponseDto<MyModulePermissionsDto>
+            {
+                Success = true,
+                Message = "Super admin has full access; no RolePermissions rows apply.",
+                Data = new MyModulePermissionsDto
+                {
+                    ApartmentId = apartmentId,
+                    RoleId = roleId,
+                    Permissions = []
+                }
+            });
+        }
+
+        var perms = await modulePermissionService.GetPermissionsForRoleAsync(apartmentId, roleId, cancellationToken);
+        return Ok(new ApiResponseDto<MyModulePermissionsDto>
+        {
+            Success = true,
+            Message = "Permissions loaded.",
+            Data = new MyModulePermissionsDto
+            {
+                ApartmentId = apartmentId,
+                RoleId = roleId,
+                Permissions = perms
             }
         });
     }
